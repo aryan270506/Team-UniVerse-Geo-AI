@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sign in · TerraTrace</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-card">
+      <img class="logo" src="/img/terratrace-logo.png" alt="TerraTrace">
+      <h1>Sign in</h1>
+      <p class="lead">Record your drives, map road hazards and earn coins.</p>
+      <form id="form" novalidate>
+        <p class="err" id="err" role="alert" hidden></p>
+        <label class="field"><span>Email</span><input class="input" type="email" name="email" autocomplete="username" required></label>
+        <label class="field"><span>Password</span><input class="input" type="password" name="password" autocomplete="current-password" required></label>
+        <button class="btn primary" type="submit" id="go">Sign in</button>
+      </form>
+      <p class="switch">New to TerraTrace? <a href="/register.html" id="toRegister">Create an account</a></p>
+    </section>
+  </main>
+  <script>
+    const q = new URLSearchParams(location.search);
+    // only same-site paths: never redirect to another origin after login
+    const next = (q.get("next") || "").match(/^\/(?!\/)[\w\-./#?=&%]*$/) ? q.get("next") : null;
+    if (next) document.getElementById("toRegister").href += `?next=${encodeURIComponent(next)}`;
+    const err = document.getElementById("err");
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target, go = document.getElementById("go");
+      err.hidden = true;
+      go.disabled = true;
+      try {
+        const r = await fetch("/api/auth/login", {
+          method: "POST", headers: { "content-type": "application/json", "X-TerraTrace": "1" },
+          body: JSON.stringify({ email: f.email.value, password: f.password.value }),
+        });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Sign-in failed");
+        // a contributor can't use admin links: fall back to their landing page
+        location.href = next && !(body.redirect === "/app/" && !next.startsWith("/app") && !next.startsWith("/live")) ? next : body.redirect;
+      } catch (ex) {
+        err.textContent = ex.message;
+        err.hidden = false;
+        go.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

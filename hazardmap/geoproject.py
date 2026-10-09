@@ -7,14 +7,14 @@ rotated by the vehicle heading and applied with a geodesic forward step.
 """
 import math
 
-from .config import CameraConfig
+from .config import CameraConfig, focal_px
 from .ingest import GEOD, Pose
 
 
 def pixel_to_ground(u: float, v: float, width: int, height: int,
                     cam: CameraConfig) -> tuple[float, float] | None:
     """Return (forward_m, lateral_m) on the road plane, or None above the horizon."""
-    fx = (width / 2) / math.tan(math.radians(cam.hfov_deg) / 2)
+    fx = focal_px(width, height, cam)
     fy = fx                                   # square pixels
     xc = (u - width / 2) / fx
     yc = (v - height / 2) / fy

@@ -139,10 +139,12 @@ class LiveTrajectory:
         self.max_gap_s = max_gap_s
         self.max_accuracy_m = max_accuracy_m
         self.fixes: list[tuple[float, float, float]] = []
+        self.rejected = 0                        # fixes dropped as too coarse (shown on the phone)
         self._traj: Trajectory | None = None
 
     def add_fix(self, t: float, lat: float, lon: float, accuracy: float | None = None) -> bool:
         if accuracy is not None and accuracy > self.max_accuracy_m:
+            self.rejected += 1
             return False                         # too coarse to place hazards with
         if self.fixes and t <= self.fixes[-1][0]:
             return False

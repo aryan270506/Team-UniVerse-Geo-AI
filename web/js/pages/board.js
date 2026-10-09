@@ -1,4 +1,4 @@
-import { $, $$, ago, caseHref, esc, glyph, pageHead, prioTag, store, toast, STATUSES, STATUS_LABEL } from "../core.js";
+import { $, $$, ago, caseHref, esc, glyph, icons, pageHead, prioTag, store, toast, wxIcon, STATUSES, STATUS_LABEL } from "../core.js";
 
 const PRIO_RANK = { P1: 0, P2: 1, P3: 2 };
 
@@ -17,8 +17,9 @@ export default async function render(el) {
     <div class="top"><span class="id">${esc(c.number)}</span>${prioTag(c.priority)}</div>
     ${c.snapshot && c.priority !== "P3" ? `<img src="${esc(c.snapshot)}" alt="" loading="lazy">` : ""}
     <div class="t"><span class="kind">${glyph(c)}${esc(c.label)}</span></div>
-    <div class="m">${esc(c.department)}</div>
-    <div class="m">${esc(c.run_id)} · ${ago(c.first_seen)}</div></article>`;
+    <div class="m">${esc(c.department)}${c.authority_code ? ` · ${esc(c.authority_code)}` : ""}</div>
+    <div class="m">${esc(c.run_id)} · ${ago(c.first_seen)}</div>
+    ${c.weather ? `<div class="m" title="${esc(c.weather.flags.join(" · "))}">${wxIcon(c.weather)} ${esc(c.weather.label)}, ${Math.round(c.weather.temp_c)}°${c.weather.flags.length ? ` · <b>${esc(c.weather.flags[0].split(":")[0])}</b>` : ""}</div>` : ""}</article>`;
 
   const draw = () => {
     const hide = $("#hideLow", el).checked;
@@ -28,6 +29,7 @@ export default async function render(el) {
       $(`[data-drop="${s}"]`, el).innerHTML = list.map(card).join("");
       $(`[data-status="${s}"] [data-count]`, el).textContent = list.length;
     }
+    icons(el);
   };
   draw();
   $("#hideLow", el).addEventListener("change", draw);

@@ -44,6 +44,8 @@
     dt { color: var(--ink-2); padding: 3px 0; } dd { margin: 0; padding: 3px 0; font-weight: 500; }
     .mono { font-variant-numeric: tabular-nums; }
     .action { margin-top: 10px; padding: 8px 12px; border-radius: 10px; background: #111; color: #fff; font-weight: 500; font-size: 12.5px; }
+    .auth { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); margin-bottom: 8px; break-inside: avoid; }
+    .auth h3 { margin: 0 0 4px; font-size: 13.5px; } .auth .src { color: var(--ink-2); font-size: 11px; margin-top: 6px; }
     .closure { padding: 10px 14px; border-radius: 14px; background: #f0fdf4; margin-bottom: 8px; }
     footer.r { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 11px; display: flex; justify-content: space-between; gap: 24px; }
     a { color: var(--ink); font-weight: 500; }
@@ -75,8 +77,10 @@
     <div id="closures"></div>
     <h2 data-n="04">Hazards requiring action</h2>
     <div id="hazards"></div>
-    <div class="sig"><div>Verified by (field officer)</div><div>Forwarded to (department / date)</div></div>
-    <footer class="r"><span>Generated automatically by TerraTrace. Coordinates WGS84; detections are AI-generated and should be field-verified.</span><span id="foot"></span></footer>
+    <h2 id="authHead" data-n="05" hidden>Responsible authorities</h2>
+    <div id="auths"></div>
+    <div class="sig"><div>Verified by (field officer)</div><div id="fwd">Forwarded to (department / date)</div></div>
+    <footer class="r"><span>Generated automatically by TerraTrace. Coordinates WGS84; detections are AI-generated and should be field-verified. Weather data by Open-Meteo.com (CC BY 4.0).</span><span id="foot"></span></footer>
   </main>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
@@ -98,6 +102,12 @@
     (async () => {
       const run = await fetch(`/api/runs/${encodeURIComponent(runId)}`).then((r) => r.json());
       const closures = await fetch(`/api/runs/${encodeURIComponent(runId)}/closures`).then((r) => r.json()).catch(() => ({ closures: [] }));
+      const auth = await fetch(`/api/runs/${encodeURIComponent(runId)}/authorities`).then((r) => r.json()).catch(() => ({}));
+      const wxr = await fetch(`/api/runs/${encodeURIComponent(runId)}/weather`).then((r) => r.json()).catch(() => ({ hazards: {} }));
+      const wx = wxr.hazards || {};
+      const wxText = (w) => w ? `${w.at.label}, ${Math.round(w.at.temp_c)}°C · rain ${w.rain_24h} mm / 24 h, ${w.rain_72h} mm / 72 h · wind ${w.at.wind_kmh} km/h` : "Not available";
+      const tel = (p) => `<a href="tel:${p.replace(/[^\d+]/g, "")}">${esc(p)}</a>`;
+      const contacts = (o) => [...o.phones.map(tel), ...o.emails.map((m) => `<a href="mailto:${esc(m)}">${esc(m)}</a>`)].join(" · ") || "Contact not listed";
       const s = run.summary;
       let feats = run.hazards.features.slice().sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.properties.severity] - { high: 0, medium: 1, low: 2 }[b.properties.severity]));
       if (only) feats = feats.filter((f) => f.properties.id === only);
@@ -123,7 +133,8 @@
         <div><b>Duration:</b> ${s.duration_s}s · ${s.frames_processed} frames analysed</div>
         <div><b>Source video:</b> ${esc(s.video)}</div><div><b>GPS log:</b> ${esc(s.gps)}</div>
         <div><b>Camera:</b> ${esc(s.config?.camera_preset || "")} preset</div>
-        <div><b>Detection:</b> YOLOv8 road damage + open-vocabulary hazards + CLIP scene check</div>`;
+        <div><b>Detection:</b> YOLOv8 road damage + open-vocabulary hazards + CLIP scene check</div>
+        ${Object.values(wx)[0] ? `<div><b>Weather during survey:</b> ${esc(wxText(Object.values(wx)[0]))}</div>` : ""}`;
 
       // map: light street tiles print well
       const map = L.map("map", { zoomControl: false, attributionControl: true });
@@ -157,9 +168,32 @@
             <dt>Confidence</dt><dd>${(p.confidence * 100).toFixed(0)}% over ${p.frames} frames</dd>
             ${p.extent_m >= 15 ? `<dt>Extent</dt><dd>${p.extent_m} m along the road</dd>` : ""}
             <dt>Department</dt><dd>${esc(DEPT[p.category] || "Roads dept.")}</dd>
+            <dt>Weather</dt><dd>${wxText(wx[p.id])}${wx[p.id]?.flags.length ? `<br><b>${wx[p.id].flags.map(esc).join(" · ")}</b>` : ""}</dd>
+            <dt>Authority</dt><dd>${auth[p.id] ? `NHAI ${esc(auth[p.id].field.office_code)} · ${auth[p.id].field.distance_km} km<br>${contacts(auth[p.id].field)}` : "No NHAI office nearby"}</dd>
           </dl>
           <div class="action">Recommended: ${esc(ACTION[p.category] || "Inspect")}</div></div></article>`;
       }).join("") || "<p>No hazards in this report.</p>";
+
+      // one block per responsible office, with full contacts + escalation
+      const offices = new Map();
+      for (const f of feats) {
+        const a = auth[f.properties.id];
+        if (!a) continue;
+        const k = a.field.office_code;
+        if (!offices.has(k)) offices.set(k, { ...a, ids: [] });
+        offices.get(k).ids.push(f.properties.id);
+      }
+      if (offices.size) {
+        $("#authHead").hidden = false;
+        $("#auths").innerHTML = [...offices.values()].map(({ field: o, escalation: e, ids }) => `<div class="auth">
+          <h3>NHAI ${esc(o.office_code)} · ${esc(o.designation)}</h3>
+          <dl><dt>Hazards</dt><dd>${ids.map(esc).join(", ")}</dd>
+            ${o.officer_name ? `<dt>Officer</dt><dd>${esc(o.officer_name)}</dd>` : ""}
+            <dt>Address</dt><dd>${esc(o.address)}</dd><dt>Contact</dt><dd>${contacts(o)}</dd>
+            ${e ? `<dt>Escalation</dt><dd>NHAI ${esc(e.office_code)}, ${esc(e.designation)} · ${contacts(e)}</dd>` : ""}</dl>
+          <div class="src">${esc(o.note ? o.note + ". " : "")}Source: NHAI office list (${esc(o.data_as_of)}); verify before dispatch.</div></div>`).join("");
+        $("#fwd").textContent = `Forwarded to ${[...offices.keys()].map((k) => `NHAI ${k}`).join(", ")} (date)`;
+      }
 
       $("#printBtn").onclick = () => window.print();
       if (q.get("print") === "1") setTimeout(() => window.print(), 1200);

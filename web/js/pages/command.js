@@ -1,6 +1,6 @@
 // Command: AI-view video synced with the map + live alert feed. Playback of a saved drive
 // (#/command/<run>) or a live session (#/command/live/<id>: processing, replay or phone).
-import { $, api, bars, caseHref, coord, esc, healthOf, icons, mmss, pageHead, prioTag, store, toast, ACTION, BLOCKING, CAT, PRIO_OF } from "../core.js";
+import { $, api, bars, caseHref, coord, esc, healthOf, icons, mmss, nearestAuthority, pageHead, weatherAt, wxIcon, prioTag, store, toast, ACTION, BLOCKING, CAT, PRIO_OF } from "../core.js";
 import { userRuns } from "../core.js";
 import { addCase, drawRoute, haversine, makeMap, renderClosures, renderCondition, vehicleIcon, ROUTE_COL } from "../map.js";
 
@@ -31,6 +31,7 @@ export default async function render(el, params, query) {
           <span class="cmd-tag label"><span class="rec" aria-hidden="true"></span><span id="cTag">${isLive ? "Live AI view" : "AI view"}</span></span>
           <video id="cVideo" playsinline muted preload="auto" ${isLive ? "hidden" : ""}></video>
           <img id="cLive" alt="Latest analysed frame" ${isLive ? "" : "hidden"}>
+          <svg class="cmd-boxes" id="cBoxes" preserveAspectRatio="xMidYMid meet" aria-hidden="true" ${isLive ? "" : "hidden"}></svg>
           <button class="cmd-play" id="cPlay" aria-label="Play drive" ${isLive ? "hidden" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg></button>
           <div class="cmd-empty label" id="cEmpty" hidden>No AI-view video for this drive. Re-process it to generate one.</div>
         </div>
@@ -119,18 +120,35 @@ export default async function render(el, params, query) {
       <div class="m">${esc(i.number)} · ${Math.round(i.confidence * 100)}% · t=${mmss(i.video_time_s)}${i.extent_m >= 15 ? ` · ${i.extent_m} m` : ""}</div>
       <div class="m">${coord(i.centroid)}</div>${route}
       <div class="m" style="color:#000">→ ${esc(ACTION[i.category] || "Inspect")}</div>
+      <div class="m" data-auth></div>
+      <div class="m" data-wx></div>
       <div class="acts"><button class="link-btn" data-locate="${esc(i.hazard_id)}">Locate</button>
         ${i.run_id ? `<a class="link-btn" href="${caseHref(i)}">Case</a>` : ""}
         <a class="link-btn" href="https://www.google.com/maps/search/?api=1&query=${i.centroid[1]},${i.centroid[0]}" target="_blank" rel="noopener">Maps</a></div>`;
   }
+  // responsible NHAI office + first phone number under each alert (looked up per location)
+  function fillAuthority(li, i) {
+    weatherAt(i.centroid, isLive ? null : i.first_seen).then((w) => {
+      const slot = li.querySelector("[data-wx]");
+      if (!slot || !w) return;
+      slot.innerHTML = `${wxIcon(w)} ${esc(w.label)}, ${Math.round(w.temp_c)}°C${w.rain_24h ? ` · ${w.rain_24h} mm/24h` : ""}${w.flags.length ? ` · <b>${esc(w.flags[0])}</b>` : ""}`;
+      icons(slot);
+    });
+    nearestAuthority(i.centroid).then((a) => {
+      const slot = li.querySelector("[data-auth]");
+      if (!slot) return;
+      slot.innerHTML = a ? `⚑ ${esc(a.office_code)}${a.phones[0] ? ` · <a href="tel:${a.phones[0].replace(/[^\d+]/g, "")}">${esc(a.phones[0])}</a>` : ""}` : "";
+    });
+  }
   function addAlert(i, animate) {
     const list = $("#cAlerts", el), ex = list.querySelector(`[data-id="${CSS.escape(i.hazard_id)}"]`);
-    if (ex) { ex.className = `alert ${i.priority}`; ex.innerHTML = alertHtml(i); return; }
+    if (ex) { ex.className = `alert ${i.priority}`; ex.innerHTML = alertHtml(i); fillAuthority(ex, i); return; }
     alerted.add(i.hazard_id);
     const li = document.createElement("li");
     li.className = `alert ${i.priority}${animate ? " in" : ""}`;
     li.dataset.id = i.hazard_id;
     li.innerHTML = alertHtml(i);
+    fillAuthority(li, i);
     list.prepend(li);
     $("#cCount", el).textContent = alerted.size;
     $("#cAlertsEmpty", el).hidden = true;
@@ -183,6 +201,13 @@ export default async function render(el, params, query) {
   if (isLive) {
     trail = L.polyline([], { color: ROUTE_COL, weight: 5, opacity: .95 }).addTo(routeLayer);
     const routePlan = L.polyline([], { color: ROUTE_COL, weight: 3, opacity: .45, dashArray: "6 8" }).addTo(routeLayer);
+    // phone sessions: raw camera frames arrive at full rate, detections come separately as boxes
+    const drawBoxes = ({ w, h, dets }) => {
+      const svg = $("#cBoxes", el);
+      svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+      svg.innerHTML = dets.map(([x1, y1, x2, y2, cat, conf]) =>
+        `<rect x="${x1}" y="${y1}" width="${x2 - x1}" height="${y2 - y1}"/><text x="${x1}" y="${Math.max(y1 - 6, 14)}">${esc(cat)} ${conf.toFixed(2)}</text>`).join("");
+    };
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/live/${encodeURIComponent(id)}`);
     ws.onmessage = (m) => {
       const ev = JSON.parse(m.data);
@@ -215,6 +240,7 @@ export default async function render(el, params, query) {
           break;
         }
         case "frame": $("#cLive", el).src = `data:image/jpeg;base64,${ev.jpeg}`; break;
+        case "boxes": drawBoxes(ev); break;
         case "stats":
           liveStats = ev;
           $("#cTime", el).textContent = `${ev.frames} frames · ${ev.dropped} dropped`;

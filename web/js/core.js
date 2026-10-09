@@ -20,10 +20,49 @@ export const ACTION = {
 };
 export const BLOCKING = new Set(["flooding", "landslide", "fallen_tree", "power_line", "blockage", "debris"]);
 
+// ---------- weather at capture (server/weather.py, Open-Meteo)
+export const wxIcon = (w, cls = "wx") => w ? `<i data-lucide="${esc(w.icon)}" class="${cls}" aria-hidden="true"></i>` : "";
+export const wxShort = (w) => w ? `${w.label}, ${Math.round(w.temp_c)}°C${w.rain_24h ? ` · ${w.rain_24h} mm/24h` : ""}` : "";
+const wxCache = new Map();
+/** Compact weather for a [lon, lat] point at an ISO time (default now), cached per ~1 km and hour. */
+export function weatherAt([lon, lat], t) {
+  const k = `${lat.toFixed(2)},${lon.toFixed(2)},${(t || new Date().toISOString()).slice(0, 13)}`;
+  if (!wxCache.has(k)) wxCache.set(k, api(`/api/weather?lat=${lat}&lon=${lon}${t ? `&t=${encodeURIComponent(t)}` : ""}`).then((r) => r.at_capture).catch(() => null));
+  return wxCache.get(k);
+}
+
+// ---------- responsible road authority (NHAI office list, see server/authorities.py)
+export const telHref = (p) => `tel:${p.replace(/[^\d+]/g, "")}`;
+export const phoneLinks = (a) => (a?.phones || []).map((p) => `<a href="${telHref(p)}">${esc(p)}</a>`).join(" · ");
+export const mailLinks = (a) => (a?.emails || []).map((m) => `<a href="mailto:${esc(m)}">${esc(m)}</a>`).join(" · ");
+export const authorityName = (a) => a ? `${a.office_code} · ${a.designation}` : "No NHAI office nearby";
+const authCache = new Map();
+/** Nearest NHAI field office for a [lon, lat] point (cached per ~1 km), or null when none in range. */
+export function nearestAuthority([lon, lat]) {
+  const k = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  if (!authCache.has(k)) authCache.set(k, api(`/api/authorities?lat=${lat}&lon=${lon}&n=1`).then((r) => r.offices[0] || null).catch(() => null));
+  return authCache.get(k);
+}
+
+// Every write carries the CSRF header the server requires; an expired session goes to login.
+export const CSRF = { "X-TerraTrace": "1" };
 export async function api(path, opts = {}) {
-  const r = await fetch(path, opts);
+  const r = await fetch(path, { ...opts, headers: { ...CSRF, ...(opts.headers || {}) } });
+  if (r.status === 401 && !path.startsWith("/api/auth/")) {
+    location.href = `/login.html?next=${encodeURIComponent(location.pathname + location.hash)}`;
+    throw new Error("Please log in");
+  }
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r.json();
+}
+
+// ---------- signed-in account
+let me = null;
+export const currentUser = () => me;
+export async function loadMe() { me = await api("/api/auth/me"); return me; }
+export async function logout() {
+  const r = await api("/api/auth/logout", { method: "POST" }).catch(() => ({ redirect: "/login.html" }));
+  location.href = r.redirect || "/login.html";
 }
 
 export const icons = (root) => window.lucide?.createIcons({ attrs: { "stroke-width": 2.25 }, ...(root ? { root } : {}) });
@@ -36,9 +75,7 @@ export function toast(msg) {
   setTimeout(() => t.remove(), 4200);
 }
 
-export const operator = () => {
-  try { return localStorage.getItem("hm.operator") || "Control room"; } catch { return "Control room"; }
-};
+export const operator = () => me?.name || "Control room";   // activity log actor (server uses the session too)
 
 // ---------- formatting
 export const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;

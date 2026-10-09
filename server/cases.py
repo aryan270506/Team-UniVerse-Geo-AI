@@ -6,18 +6,23 @@ so anything processed (batch, replay, phone) shows up as a NEW case on the next 
     status pipeline: new -> verified -> assigned -> in_progress -> resolved
 """
 import json
+import os
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from hazardmap.config import ROOT, RUNS_DIR
 
+from . import auth, authorities, drives, rewards, weather
+from . import db as db_platform
+
 router = APIRouter()
-DB_PATH = ROOT / "data" / "cases.db"
+DB_PATH = Path(os.environ.get("TERRATRACE_CASES_DB") or ROOT / "data" / "cases.db")
 
 STATUSES = ["new", "verified", "assigned", "in_progress", "resolved"]
 STATUS_LABEL = {"new": "New", "verified": "Verified", "assigned": "Assigned", "in_progress": "In progress", "resolved": "Resolved"}
@@ -33,7 +38,8 @@ PENALTY = {"high": 25, "medium": 10, "low": 3}
 
 _lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
-_index: dict = {"mtimes": {}, "features": {}, "summaries": {}}
+_index: dict = {"mtimes": {}, "features": {}, "summaries": {}, "weather": {}}
+_authority_version = [None]       # authorities file mtime the backfill last ran against
 
 
 def _db() -> sqlite3.Connection:
@@ -53,6 +59,10 @@ def _db() -> sqlite3.Connection:
                 kind TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS activity_case ON activity(case_id, ts);
         """)
+        cols = {r[1] for r in _conn.execute("PRAGMA table_info(cases)")}
+        if "authority" not in cols:   # NHAI office (office_code); '' = no office in range
+            _conn.execute("ALTER TABLE cases ADD COLUMN authority TEXT")
+            _conn.execute("ALTER TABLE cases ADD COLUMN authority_manual INTEGER NOT NULL DEFAULT 0")
         with _conn:  # rebrand: older logs credit the pre-rename AI actor
             _conn.execute("UPDATE activity SET actor = 'TerraTrace AI' WHERE actor = 'HazardMap AI'")
     return _conn
@@ -92,17 +102,82 @@ def sync():
                 p = f["properties"]
                 cid = f"{d.name}/{p['id']}"
                 cur = conn.execute(
-                    "INSERT OR IGNORE INTO cases (id, run_id, hazard_id, status, priority, department, created_at, updated_at) "
-                    "VALUES (?, ?, ?, 'new', ?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO cases (id, run_id, hazard_id, status, priority, department, authority, created_at, updated_at) "
+                    "VALUES (?, ?, ?, 'new', ?, ?, ?, ?, ?)",
                     (cid, d.name, p["id"], PRIORITY_OF.get(p["severity"], "P3"),
-                     DEPARTMENTS[DEPT_OF.get(p["category"], 0)], p["first_seen"], _now()))
+                     DEPARTMENTS[DEPT_OF.get(p["category"], 0)], _auto_authority(p), p["first_seen"], _now()))
                 if cur.rowcount:
                     conn.execute("INSERT INTO activity (case_id, ts, kind, actor, text) VALUES (?, ?, 'detected', 'TerraTrace AI', ?)",
                                  (cid, p["first_seen"], f"Detected {CATEGORY_LABEL.get(p['category'], p['category'])} "
                                   f"({p['severity']}, {round(p['confidence'] * 100)}% confidence) on drive {d.name}"))
     for gone in set(_index["features"]) - seen:                 # run deleted
-        for k in ("mtimes", "features", "summaries"):
+        for k in ("mtimes", "features", "summaries", "weather"):
             _index[k].pop(gone, None)
+    _backfill_authorities(conn)
+    _refresh_weather()
+    _index["contributors"] = drives.contributors()
+
+
+_weather_busy = threading.Event()
+_weather_tried: dict[str, float] = {}     # run_id -> last fetch attempt (offline / archive lag: retry later)
+WEATHER_RETRY_S = 600
+
+
+def _refresh_weather():
+    """Load cached capture weather; fetch what's missing in the background (never blocks a request)."""
+    todo = []
+    for run_id, feats in _index["features"].items():
+        f = RUNS_DIR / run_id / "weather.json"
+        m = f.stat().st_mtime if f.exists() else None
+        if run_id not in _index["weather"] or _index["weather"][run_id].get("__mtime") != m:
+            _index["weather"][run_id] = {**weather.cached(RUNS_DIR / run_id), "__mtime": m}
+        if any(h not in _index["weather"][run_id] for h in feats) and \
+                time.time() - _weather_tried.get(run_id, 0) > WEATHER_RETRY_S:
+            todo.append(run_id)
+    if todo and not _weather_busy.is_set():
+        _weather_busy.set()
+        threading.Thread(target=_prefetch, args=(todo,), daemon=True).start()
+
+
+def _prefetch(run_ids: list[str]):
+    try:
+        for run_id in run_ids:
+            _weather_tried[run_id] = time.time()
+            feats = list(_index["features"].get(run_id, {}).values())
+            if feats:
+                weather.for_run(RUNS_DIR / run_id, feats)
+    finally:
+        _weather_busy.clear()
+
+
+def _auto_authority(p: dict) -> str | None:
+    """Nearest NHAI field office for a hazard; '' when none is in range, None when unknown yet."""
+    if not authorities.load():
+        return None                                              # office list not geocoded yet
+    lon, lat = p["centroid"]
+    return authorities.nearest_code(lat, lon) or ""
+
+
+def _backfill_authorities(conn: sqlite3.Connection):
+    """Auto-assign cases created before the office list existed (or when it changes)."""
+    version = authorities.PATH.stat().st_mtime if authorities.PATH.exists() else None
+    if version is None or version == _authority_version[0]:
+        return
+    _authority_version[0] = version
+    rows = conn.execute("SELECT id, run_id, hazard_id FROM cases WHERE authority_manual = 0").fetchall()
+    with conn:
+        for r in rows:
+            feat = _index["features"].get(r["run_id"], {}).get(r["hazard_id"])
+            if feat is not None:
+                conn.execute("UPDATE cases SET authority = ? WHERE id = ?", (_auto_authority(feat["properties"]), r["id"]))
+
+
+def authority_codes(run_id: str) -> dict:
+    """hazard_id -> assigned office_code for one drive (used by the report)."""
+    with _lock:
+        sync()
+        rows = _db().execute("SELECT hazard_id, authority FROM cases WHERE run_id = ?", (run_id,)).fetchall()
+    return {r["hazard_id"]: r["authority"] for r in rows if r["authority"]}
 
 
 def _case_dict(row: sqlite3.Row) -> dict | None:
@@ -124,7 +199,18 @@ def _case_dict(row: sqlite3.Row) -> dict | None:
         "drive": {"id": row["run_id"], "video": s.get("video"), "start": s.get("video_start"), "mode": s.get("mode"),
                   "annotated": bool((s.get("media") or {}).get("annotated"))},
         "geometry": feat["geometry"],
+        **_authority_block(row, p),
+        "contributor": (_index.get("contributors") or {}).get(row["run_id"]),
+        "weather": weather.compact(_index["weather"].get(row["run_id"], {}).get(row["hazard_id"])),
     }
+
+
+def _authority_block(row: sqlite3.Row, p: dict) -> dict:
+    lon, lat = p["centroid"]
+    a = authorities.assignment(row["authority"], lat, lon)
+    return {"authority": a["field"] if a else None, "escalation": a["escalation"] if a else None,
+            "authority_code": a["field"]["office_code"] if a else None,
+            "authority_auto": not row["authority_manual"]}
 
 
 def all_cases() -> list[dict]:
@@ -179,14 +265,16 @@ class CaseUpdate(BaseModel):
     priority: str | None = None
     department: str | None = None
     assignee: str | None = Field(None, max_length=80)
+    authority: str | None = Field(None, max_length=80)   # NHAI office_code
     note: str | None = Field(None, max_length=1000)
     actor: str = Field("Control room", max_length=60)
 
 
 @router.patch("/api/cases/{run_id}/{hazard_id}")
-def update_case(run_id: str, hazard_id: str, u: CaseUpdate):
+def update_case(run_id: str, hazard_id: str, u: CaseUpdate, request: Request):
     cid = f"{run_id}/{hazard_id}"
-    actor = (u.actor or "Control room").strip() or "Control room"
+    me = auth.current_user(request)
+    actor = me["name"] if me else ((u.actor or "Control room").strip() or "Control room")
     with _lock:
         sync()
         row = _get(cid)
@@ -207,6 +295,12 @@ def update_case(run_id: str, hazard_id: str, u: CaseUpdate):
                 raise HTTPException(400, "bad department")
             sets["department"] = u.department
             logs.append(("department", f"Assigned to {u.department}"))
+        if u.authority and u.authority != row["authority"]:
+            office = authorities.get(u.authority)
+            if office is None:
+                raise HTTPException(400, "unknown authority office")
+            sets["authority"], sets["authority_manual"] = u.authority, 1
+            logs.append(("authority", f"Authority set to {office['office_code']} ({office['designation']})"))
         if u.assignee is not None and u.assignee.strip() != (row["assignee"] or ""):
             sets["assignee"] = u.assignee.strip() or None
             logs.append(("assignee", f"Owner set to {u.assignee.strip() or '—'}"))
@@ -222,6 +316,22 @@ def update_case(run_id: str, hazard_id: str, u: CaseUpdate):
                 conn.execute("INSERT INTO activity (case_id, ts, kind, actor, text) VALUES (?, ?, ?, ?, ?)",
                              (cid, now, kind, actor, text))
     return get_case(run_id, hazard_id)
+
+
+@router.get("/api/cases/{run_id}/{hazard_id}/weather")
+def case_weather(run_id: str, hazard_id: str):
+    """Capture-time weather (cached per drive) + 48 h outlook for open cases."""
+    with _lock:
+        sync()
+        row = _get(f"{run_id}/{hazard_id}")
+        feat = _index["features"].get(run_id, {}).get(hazard_id)
+    if feat is None:
+        raise HTTPException(404, "hazard no longer present in this drive")
+    p = feat["properties"]
+    lon, lat = p["centroid"]
+    at = weather.for_run(RUNS_DIR / run_id, [feat]).get(hazard_id)
+    ahead = weather.outlook(lat, lon, p["category"]) if row["status"] != "resolved" else None
+    return {"at_capture": at, "outlook": ahead, "attribution": weather.ATTRIBUTION}
 
 
 @router.get("/api/overview")
@@ -243,6 +353,9 @@ def overview():
         "by_status": {s: sum(1 for c in cases if c["status"] == s) for s in STATUSES},
         "by_priority": by("priority", open_cases), "by_department": by("department", open_cases),
         "by_category": by("label", open_cases),
+        "by_authority": by("authority_code", [c for c in open_cases if c["authority_code"]]),
+        "top_contributors": [[r["name"], r["coins"]] for r in rewards.leaderboard()["top"]],
+        "vouchers": dict(db_platform.one("SELECT COUNT(*) AS n, COALESCE(SUM(value_inr), 0) AS inr FROM redemptions WHERE status = 'issued'")),
         "network_health": health(feats, km), "km_surveyed": round(km, 2),
         "drives": drives, "activity": activity, "status_labels": STATUS_LABEL,
     }

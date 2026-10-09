@@ -8,11 +8,15 @@
   WS   /ws/live/{id}/ingest    phone -> server: binary [float64 capture ms][JPEG], JSON gps fixes
 """
 import asyncio
+import base64
+import hmac
 import json
 import os
 import shutil
 import socket
+import secrets
 import struct
+import subprocess
 import threading
 import time
 import traceback
@@ -29,6 +33,7 @@ from hazardmap.ingest import LiveTrajectory, Trajectory, load_gps, resolve_video
 from hazardmap.live import LiveSession
 from hazardmap.pipeline import get_detector
 
+from . import auth, drives
 from .workers import executor, make_cfg, new_run_id, num
 
 router = APIRouter()
@@ -38,8 +43,12 @@ DEVICE_IDLE_TIMEOUT_S = 600
 class Live:
     """Control state for one live session, shared by the worker thread and the event loop."""
 
-    def __init__(self, sid: str, mode: str, name: str, loop: asyncio.AbstractEventLoop):
+    def __init__(self, sid: str, mode: str, name: str, loop: asyncio.AbstractEventLoop, owner: int | None = None):
         self.id, self.mode, self.name, self.loop = sid, mode, name, loop
+        self.owner = owner             # platform user id (None: admin/control room)
+        # secret in the QR link: lets a second device (phone) stream into this session without
+        # signing in; valid only for this session and only while it runs
+        self.pair_key = secrets.token_urlsafe(18)
         self.state = "queued"          # queued | running | finalizing | done | error
         self.error: str | None = None
         self.summary: dict | None = None
@@ -86,32 +95,40 @@ def _finish(lv: Live):
     if lv.session.frames == 0:                 # nothing was streamed: don't litter the run list
         shutil.rmtree(lv.session.out, ignore_errors=True)
         lv.state = "done"
+        drives.on_failed(lv.id, "Nothing was streamed")
         lv.emit({"type": "done", "run_id": None, "summary": None})
         return
     lv.summary = lv.session.finalize()
     lv.state = "done"
+    drives.on_finished(lv.id, lv.summary)
     lv.emit({"type": "done", "run_id": lv.id, "summary": {k: v for k, v in lv.summary.items() if k != "config"}})
 
 
 def _guard(fn):
     def wrapped(lv: Live, *a):
         try:
+            drives.on_processing(lv.id)
             fn(lv, *a)
         except Exception as e:
             traceback.print_exc()
             lv.state, lv.error = "error", str(e)
+            drives.on_failed(lv.id, str(e))
             lv.emit({"type": "error", "message": str(e)})
     return wrapped
 
 
 @_guard
-def _file_worker(lv: Live, video: str, gps: str, cfg, speed: float | None):
+def _file_worker(lv: Live, video: str, gps: str, cfg, speed: float | None, video_start: float | None = None):
     """Play a recorded drive through the live engine.
     speed=None: process every frame as fast as the GPU allows (Process drive).
-    speed=x:    pace to x times real time, dropping frames if behind (Replay)."""
+    speed=x:    pace to x times real time, dropping frames if behind (Replay).
+    video_start: exact epoch of the first frame (in-app recorder), overrides metadata sync."""
+    if Path(video).suffix.lower() in (".webm", ".mkv"):
+        lv.emit({"type": "status", "state": "converting"})
+        video = _to_mp4(video)
     traj = Trajectory(load_gps(gps), cfg.max_gps_gap_s)
     info = video_info(video)
-    t0, sync = resolve_video_start(info, traj, cfg.time_offset_s)
+    t0, sync = resolve_video_start(info, traj, cfg.time_offset_s, video_start)
     lv.route = traj.geojson()
     meta = {"video": Path(video).name, "gps": Path(gps).name, "sync_method": sync}
     if speed:
@@ -148,12 +165,22 @@ def _file_worker(lv: Live, video: str, gps: str, cfg, speed: float | None):
     _finish(lv)
 
 
+def _to_mp4(path: str) -> str:
+    """Browser recordings (MediaRecorder WebM) lack a duration/seek index: re-encode once."""
+    out = str(Path(path).with_suffix(".mp4"))
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", path, "-c:v", "libx264", "-preset", "veryfast",
+                    "-crf", "25", "-pix_fmt", "yuv420p", "-an", out], check=True)
+    Path(path).unlink(missing_ok=True)
+    return out
+
+
 def start_file_session(vpath: Path, gpath: Path, name: str, cfg, speed: float | None,
-                       loop: asyncio.AbstractEventLoop) -> Live:
+                       loop: asyncio.AbstractEventLoop, video_start: float | None = None,
+                       owner: int | None = None) -> Live:
     """Start a session over files already saved under runs/<sid>/input."""
     sid = vpath.parent.parent.name
-    lv = lives[sid] = Live(sid, "replay" if speed else "batch", name, loop)
-    executor.submit(_file_worker, lv, str(vpath), str(gpath), cfg, speed)
+    lv = lives[sid] = Live(sid, "replay" if speed else "batch", name, loop, owner)
+    executor.submit(_file_worker, lv, str(vpath), str(gpath), cfg, speed, video_start)
     return lv
 
 
@@ -161,6 +188,7 @@ def start_file_session(vpath: Path, gpath: Path, name: str, cfg, speed: float | 
 def _device_worker(lv: Live, cfg):
     lv.session = LiveSession(cfg, lv.id, "device", get_detector(cfg), lv.traj.pose, lv.traj.geojson, lv.emit, {
         "video": "phone camera (live)", "gps": "phone GPS (live)", "sync_method": "device clock"})
+    lv.session.passthrough = True              # ingest forwards every phone frame; we add boxes
     lv.state = "running"
     lv.emit({"type": "status", "state": "running"})
     idx = 0
@@ -209,18 +237,54 @@ async def start_replay(video: UploadFile = File(...), gps: UploadFile = File(...
 
 
 @router.post("/api/live/device")
-async def start_device(request: Request, name: str = Form("phone drive"), sample_fps: float = Form(5.0),
+async def start_device(request: Request, name: str = Form("phone drive"), sample_fps: float = Form(30.0),
                        use_world: bool = Form(True)):
-    sid = new_run_id(name, "phone-")
-    cfg = make_cfg(sample_fps, 0.0, use_world, "phone", False)
-    lv = lives[sid] = Live(sid, "device", name, asyncio.get_running_loop())
-    lv.traj = LiveTrajectory(cfg.max_gps_gap_s)
-    executor.submit(_device_worker, lv, cfg)
-    # Phones only allow camera + GPS on HTTPS, so the link always targets the HTTPS server.
+    user = auth.current_user(request)
+    lv = create_device_session(name, sample_fps, use_world, asyncio.get_running_loop(),
+                               None if user is None or user["role"] == "admin" else user["id"])
+    return {**lv.info(), **pair_links(request, lv, sample_fps)}
+
+
+def pair_links(request: Request, lv: Live, fps: float = 30.0) -> dict:
+    """QR / link targets for a phone. Phones only allow camera + GPS on HTTPS, so the links
+    always point at the HTTPS server, on every LAN address of this machine."""
     secure = request.url.scheme == "https"
     port = request.url.port if secure and request.url.port else int(os.environ.get("HAZARDMAP_HTTPS_PORT", "8443"))
-    urls = [f"https://{ip}:{port}/live.html?s={sid}&fps={sample_fps:g}" for ip in _lan_ips()]
-    return {**lv.info(), "phone_urls": urls, "secure": secure}
+    q = f"live.html?s={lv.id}&fps={fps:g}&k={lv.pair_key}"
+    return {"phone_urls": [f"https://{ip}:{port}/{q}" for ip in _lan_ips()], "secure": secure,
+            "this_device": f"/live.html?s={lv.id}&fps={fps:g}"}
+
+
+def key_ok(lv: Live | None, key: str | None) -> bool:
+    return bool(lv and key and lv.state in ("queued", "running") and hmac.compare_digest(key, lv.pair_key))
+
+
+@router.get("/api/pair/{sid}")
+def pair_status(sid: str, k: str = ""):
+    """Session state for a paired phone (no login; the key from the QR is the credential)."""
+    lv = lives.get(sid)
+    if not key_ok(lv, k):
+        raise HTTPException(404, "This live link has expired. Create a new session.")
+    return lv.info()
+
+
+def create_device_session(name: str, sample_fps: float, use_world: bool, loop: asyncio.AbstractEventLoop,
+                          owner: int | None) -> Live:
+    # Sessions share one detector thread: release this owner's phone sessions nobody ever
+    # streamed to, otherwise an abandoned link keeps the new session queued behind it.
+    for other in lives.values():
+        if other.mode == "device" and other.owner == owner and other.state in ("queued", "running") and \
+                (other.session is None or other.session.frames == 0):
+            other.stop.set()
+            other.slot_event.set()
+    sid = new_run_id(name, "phone-")
+    cfg = make_cfg(sample_fps, 0.0, use_world, "phone", False)
+    lv = lives[sid] = Live(sid, "device", name, loop, owner)
+    lv.traj = LiveTrajectory(cfg.max_gps_gap_s)
+    if owner is not None:
+        drives.register(sid, owner, "live", name)
+    executor.submit(_device_worker, lv, cfg)
+    return lv
 
 
 @router.post("/api/live/{sid}/stop")
@@ -246,7 +310,12 @@ def status(sid: str):
 @router.websocket("/ws/live/{sid}")
 async def viewer(ws: WebSocket, sid: str):
     lv = lives.get(sid)
+    user = auth.user_from_token(ws.cookies.get(auth.COOKIE))
     await ws.accept()
+    if user is None or not (user["role"] == "admin" or (lv is not None and lv.owner == user["id"])):
+        await ws.send_json({"type": "error", "message": "not allowed"})
+        await ws.close(code=4403)
+        return
     if lv is None:
         await ws.send_json({"type": "error", "message": "live session not found"})
         await ws.close()
@@ -279,7 +348,13 @@ async def viewer(ws: WebSocket, sid: str):
 @router.websocket("/ws/live/{sid}/ingest")
 async def ingest(ws: WebSocket, sid: str):
     lv = lives.get(sid)
+    user = auth.user_from_token(ws.cookies.get(auth.COOKIE))
+    paired = key_ok(lv, ws.query_params.get("k"))
     await ws.accept()
+    if not paired and (user is None or (lv is not None and user["role"] != "admin" and lv.owner != user["id"])):
+        await ws.send_json({"type": "error", "message": "This live link is not valid any more. Scan a new QR code."})
+        await ws.close(code=4401)
+        return
     if lv is None or lv.mode != "device":
         await ws.send_json({"type": "error", "message": "no phone session with this id"})
         await ws.close()
@@ -300,9 +375,14 @@ async def ingest(ws: WebSocket, sid: str):
                         lv.session.skipped()        # previous frame never processed: drop it
                     lv.slot = (t_cap, data[8:])
                     lv.slot_event.set()
+                if lv.viewers:                        # full-rate preview, independent of inference speed
+                    lv._fanout({"type": "frame", "jpeg": base64.b64encode(data[8:]).decode()})
                 st = lv.session.stats() if lv.session else {}
+                boxes = lv.session.last_boxes if lv.session else None
                 await ws.send_json({"type": "ack", "state": lv.state, "hazards": st.get("hazards", 0),
-                                    "fps": st.get("fps", 0), "latency_s": st.get("latency_s", 0)})
+                                    "fps": st.get("fps", 0), "latency_s": st.get("latency_s", 0),
+                                    "gps_fixes": len(lv.traj.fixes), "gps_rejected": lv.traj.rejected,
+                                    "boxes": boxes if boxes and time.time() - boxes["t"] < 1.0 else None})
             elif msg.get("text"):
                 m = json.loads(msg["text"])
                 if m.get("type") == "gps" and lv.traj is not None:

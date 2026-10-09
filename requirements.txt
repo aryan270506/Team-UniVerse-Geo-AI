@@ -1,3 +1,4 @@
+cryptography==50.0.2   # Fernet: voucher codes encrypted at rest
 fastapi==0.143.0
 gpxpy==1.6.2
 lap==0.5.13

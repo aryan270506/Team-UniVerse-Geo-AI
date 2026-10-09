@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Create account · TerraTrace</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-card">
+      <img class="logo" src="/img/terratrace-logo.png" alt="TerraTrace">
+      <h1>Create your account</h1>
+      <p class="lead">Turn your daily drive into safer roads. Every valid minute earns coins.</p>
+      <div class="auth-perks">
+        <div><b>Record</b>video + GPS in one tap</div>
+        <div><b>Map</b>hazards the AI finds</div>
+        <div><b>Earn</b>coins per drive</div>
+      </div>
+      <form id="form" novalidate>
+        <p class="err" id="err" role="alert" hidden></p>
+        <label class="field"><span>Name</span><input class="input" name="name" autocomplete="name" maxlength="60" required></label>
+        <label class="field"><span>Email</span><input class="input" type="email" name="email" autocomplete="email" required></label>
+        <label class="field"><span>Password</span><input class="input" type="password" name="password" autocomplete="new-password" minlength="8" required></label>
+        <span class="hint">At least 8 characters with upper- and lower-case letters and a number, or 12+ characters.</span>
+        <button class="btn primary" type="submit" id="go">Create account</button>
+      </form>
+      <p class="switch">Already registered? <a href="/login.html" id="toLogin">Sign in</a></p>
+    </section>
+  </main>
+  <script>
+    const q = new URLSearchParams(location.search);
+    const next = (q.get("next") || "").match(/^\/(?:app|live)[\w\-./#?=&%]*$/) ? q.get("next") : null;
+    if (next) document.getElementById("toLogin").href += `?next=${encodeURIComponent(next)}`;
+    const err = document.getElementById("err");
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target, go = document.getElementById("go");
+      err.hidden = true;
+      go.disabled = true;
+      try {
+        const r = await fetch("/api/auth/register", {
+          method: "POST", headers: { "content-type": "application/json", "X-TerraTrace": "1" },
+          body: JSON.stringify({ name: f.name.value, email: f.email.value, password: f.password.value }),
+        });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Please check the form");
+        location.href = next || body.redirect;
+      } catch (ex) {
+        err.textContent = ex.message;
+        err.hidden = false;
+        go.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

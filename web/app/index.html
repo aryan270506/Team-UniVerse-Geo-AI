@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f1f1f3">
+  <title>TerraTrace · Drive &amp; earn</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/app/app.css">
+</head>
+<body>
+  <header class="u-top">
+    <a href="#/home" aria-label="TerraTrace home"><img src="/img/terratrace-logo.png" alt="TerraTrace"></a>
+    <a class="coin-pill" href="#/market" aria-label="Your coins"><span class="coin">T</span><span id="bal">–</span></a>
+  </header>
+  <main class="u-main" id="outlet" tabindex="-1"></main>
+  <nav class="u-tabs" aria-label="Primary">
+    <a href="#/home" data-route="home"><i data-lucide="house"></i>Home</a>
+    <a href="#/map" data-route="map"><i data-lucide="map"></i>Map</a>
+    <a href="#/record" data-route="record" class="tab-rec"><i data-lucide="circle-dot"></i>Record</a>
+    <a href="#/market" data-route="market"><i data-lucide="gift"></i>Rewards</a>
+    <a href="#/account" data-route="account"><i data-lucide="user-round"></i>Account</a>
+  </nav>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script type="module" src="/app/app.js"></script>
+</body>
+</html>

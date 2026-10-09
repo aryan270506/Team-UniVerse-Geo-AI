@@ -60,6 +60,126 @@ Case state lives in `data/cases.db` (SQLite, git-ignored). Cases are created aut
 
 Frontend: plain ES modules with no build step. Design tokens are in `web/css/tokens.css` (palette, type scale, radii, shadows, gradients, status colours); components and pages build only on those tokens.
 
+## Platform: contributors, admin, reward coins
+
+TerraTrace has two sides, and everyone must sign in:
+
+| | Who | Where |
+|---|---|---|
+| **Contributor app** | anyone who registers at `/register.html` | `/app/` (mobile-first) |
+| **Admin dashboard** | admin accounts only | `/` (everything above: cases, board, drives, command, insights, plus **Contributors & coins**) |
+
+**Create the admin first.** There is no default password and no way to become admin from the web:
+
+```bash
+.venv/bin/python -m tools.create_admin --email you@example.org --name "Control room"   # prompts for a password (12+ chars)
+```
+
+Re-running the command resets the password and signs that account out everywhere.
+
+**Contributor app:**
+- **Record:** the phone camera and GPS are captured *together* in the browser and uploaded as one drive. The recorder's start time syncs video and GPS exactly, and browser WebM is converted to MP4 on the server.
+- **Go live:** stream with real-time detection (`live.html`).
+- **Upload drive:** a dashcam video plus its GPX/CSV.
+- **Drives:** status (queued with position, analysing, done), plus the hazards found on a map, with weather.
+- **Rewards:** balance, ledger and a weekly leaderboard.
+- **Account:** change password, sign out.
+
+**Coins** (`server/rewards.py`):
+- **Earning:** 1 coin per 30 s of valid footage, +5 per confirmed hazard. Valid means it has GPS, is ≥ 30 s long, covers ≥ 0.2 km, and averages over 5 km/h.
+- **Limits:** at most 60 coins per drive and 300 per user per day. A re-upload of the same video (SHA-256) earns nothing.
+- **Pending:** coins show as *pending* until analysis finishes.
+- **Ledger:** append-only. Admins adjust or revoke coins with a reason; history is never edited.
+
+**Security:**
+- **Passwords:** scrypt hashes.
+- **Sessions:** random tokens in HttpOnly, SameSite=Lax cookies (Secure over HTTPS); only the token's hash is stored.
+- **CSRF:** every write needs the `X-TerraTrace: 1` header.
+- **Login lockout:** after 5 failures (per email + IP) for 15 min.
+- **Access:** role checks on every route and WebSocket. A contributor can only read their own drives (`/runs/<id>`, `/api/runs/<id>`).
+- **Uploads:** capped at 2 GB, only known file types, 20 per day.
+
+Data lives in `data/platform.db` (git-ignored). For tests or a second instance, `TERRATRACE_PLATFORM_DB`, `TERRATRACE_CASES_DB` and `TERRATRACE_RUNS_DIR` override the locations.
+
+## Route checker (contributor app → Map)
+
+A Google-Maps-style screen for contributors: enter a start (or use **Your location**) and a destination, or long-press the map to drop a pin. The app then shows up to 3 driving routes and every **open** reported hazard on each one.
+
+- **On the route:** a hazard counts if its point or stretch is within 35 m of the route line. Hazards are listed in driving order ("In 1.1 km"), with type, severity, status, when it was seen, weather and the AI photo.
+- **Recommendations:** routes are badged **Safest** (no blocking hazards, lowest risk score) and **Fastest**. A route with a flood, landslide, fallen tree or similar shows "Road may be closed".
+- **Navigation:** **Start in Google Maps** hands the chosen trip to Google Maps for turn-by-turn directions.
+- **Sharing:** routes can be shared as `/app/#/map?from=lat,lon&to=lat,lon`.
+- **Before a route is chosen:** the map shows the open hazards in view.
+- **Privacy:**
+  - Only open cases are shown; resolving a case removes it from everyone's map.
+  - Admin fields (department, assignee, notes, authority contacts) are never sent.
+  - Detection photos are served only while their case is open.
+- **Services:** all free and keyless, called from the server with caching and a 60 searches per minute per-user limit. Photon (OSM) for search, OSRM for routes, Nominatim for "what's here".
+
+API: `GET /api/map/search?q=`, `GET /api/map/reverse?lat=&lon=`, `GET /api/map/hazards?bbox=w,s,e,n`, `POST /api/map/route` `{"origin": [lon, lat], "destination": [lon, lat]}`, `GET /api/map/photo/<run>/<hazard>`.
+
+## Rewards marketplace (Amazon.in vouchers)
+
+Contributors spend coins on Amazon.in gift vouchers in the app's **Rewards** tab, at **10 coins = ₹1**: ₹100 = 1,000, ₹250 = 2,500, ₹500 = 5,000 and ₹1,000 = 10,000 coins. Vouchers are always available:
+- **Codes in stock:** the code is shown instantly, with a copy button and a link to add it on Amazon.in.
+- **No stock:** the request is accepted as **Processing**. The coins are held, and the user is promised the code within 48 h. It is filled automatically when you add codes for that voucher, or by hand with **Fill with code**. **Reject & refund** returns the coins.
+
+Past vouchers stay under **My vouchers**.
+
+**Stocking codes (admin → Rewards marketplace):**
+- Buy Amazon.in gift cards in bulk, then click **Add codes** and paste them or load the supplier's CSV (`code[,pin][,expiry YYYY-MM-DD]`). Duplicates, expired codes and malformed lines are skipped and reported.
+- Codes are issued earliest-expiry first.
+- The rail badge shows the number of requests waiting for a code, or "!" when any denomination is below 5 codes.
+- Prices and on-sale status are editable per item.
+
+**Safety:**
+- **Atomic redemption:** the balance check, picking a code, marking it issued and the −coins ledger entry all happen in one transaction. A balance can't be double-spent, and a code is never issued twice.
+- **Limits:** up to 3 vouchers per user per day and ₹2,000 per month. Admins can't redeem.
+- **Encrypted codes:** codes are encrypted at rest (Fernet; key in `TERRATRACE_VOUCHER_KEY` or `data/voucher.key`, created on first use and git-ignored). **Back up the key with the database:** without it, stored codes can't be read.
+- **Who can see a code:** the full code is shown only to the user who redeemed it. Admins see masked codes and how often each was opened.
+- **Void & refund:** if a code doesn't work, **Void & refund** retires the code and returns the coins as a ledger entry.
+
+API: `GET /api/me/market`, `POST /api/me/market/<item>/redeem` `{"confirm": true}`, `GET /api/me/redemptions[/<id>]`; admin `GET /api/admin/market`, `POST /api/admin/market/<item>/codes`, `PATCH /api/admin/market/<item>`, `POST /api/admin/redemptions/<id>/fulfil` `{code, pin, expiry}`, `POST /api/admin/redemptions/<id>/void`.
+
+## Responsible authority (NHAI offices)
+
+Every case is assigned to the responsible road authority automatically, alongside its type-based department. The office list is NHAI's own 'State Wise RO, PIUs and CMU List' (176 offices, dated March 2014) in `data/authorities/india_road_authority_dataset.csv`.
+
+- **Matching:** the nearest NHAI field office (PIU / CMU / site office) to the hazard, by straight-line distance. Its state's Regional Office is listed as escalation. Hazards more than 300 km from any office (e.g. drives outside India) show "No NHAI office nearby".
+- **Where it shows:**
+  - case page: contacts with tap-to-call, *Email authority* and *Copy details*, and an override dropdown that is logged in the activity feed
+  - cases table and CSV export, board cards and search
+  - Insights
+  - live alerts
+  - the printed report, including its "Forwarded to" line
+- **Office locations:** the CSV has no coordinates, so they are geocoded once from each address's PIN code (or city) and cached in `data/authorities.json`:
+
+```bash
+.venv/bin/python -m tools.geocode_authorities   # re-run after editing the CSV; already-located offices are skipped
+```
+
+API: `GET /api/authorities?lat=&lon=` (nearest offices), `GET /api/runs/<id>/authorities` (per hazard), `PATCH /api/cases/<run>/<hazard>` with `{"authority": "<office_code>"}`.
+
+## Weather
+
+Every case carries the weather at its location and capture time, from [Open-Meteo](https://open-meteo.com) (free, no API key; data CC BY 4.0).
+
+- **Which source:** captures from the last ~85 days use Open-Meteo's forecast models (best-match, high resolution). Older ones use the ERA5 reanalysis archive, which goes back to 1940, so 2012 or 2017 drives work too.
+- **What is fetched:**
+  - conditions in the capture hour: label and icon, temperature, rain, snow, wind and gusts, humidity, cloud, visibility (recent data only), day or night
+  - rain in the 24 h and 72 h before the capture
+  - flags: heavy rain, waterlogging likely, low visibility, freezing, storm gusts, thunderstorm
+  - for open cases, a 48 h outlook with repair or closure advice, e.g. "Rain expected in ~6 h: use cold-mix / temporary patch"
+- **Where it shows:**
+  - case page card
+  - cases table and CSV export, board cards
+  - live alerts
+  - the "Email authority" and "Copy details" text
+  - the printed report
+- **Caching:** capture weather never changes, so it is fetched once in the background and stored in `runs/<id>/weather.json`. Hazards within about 5 km and the same hour share one request. The outlook is cached in memory for 30 min. When the service is unreachable the app keeps working without weather and retries after 10 min.
+
+API: `GET /api/cases/<run>/<hazard>/weather` (capture weather and outlook), `GET /api/runs/<id>/weather` (per hazard), `GET /api/weather?lat=&lon=[&t=]` (any point; defaults to now).
+
 ## Mission control, alerts, report
 
 - **◉ Mission control:** the AI-view video sits beside the map. It is rendered per run as `annotated.mp4`, with detection boxes, flood/landslide tint and a HUD (time, speed, GPS, hazard count). It is synced through `timeline.json`: as the video plays, the vehicle moves on the map, hazard pins drop and alert cards slide in (with sound). Clicking a coloured tick on the timeline jumps to that hazard.

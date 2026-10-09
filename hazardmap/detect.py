@@ -65,6 +65,8 @@ class HazardDetector:
     def __init__(self, cfg: PipelineConfig):
         self.cfg = cfg
         self.rdd = YOLO(str(cfg.rdd_weights))
+        # separate instance: the tracker state lives on the model, the near pass is untracked
+        self.rdd_near = YOLO(str(cfg.rdd_weights)) if cfg.rdd_near_imgsz else None
         self.world = None
         if cfg.use_world:
             self.world = YOLO(str(cfg.world_weights))
@@ -119,19 +121,27 @@ class HazardDetector:
             t0 = time.perf_counter()
             res = self._run(model, frame, conf, imgsz)
             infer += time.perf_counter() - t0
-            if res.boxes is None or len(res.boxes) == 0:
+            if res.boxes is None or (len(res.boxes) == 0 and source != "rdd"):
                 continue
-            ids = res.boxes.id.int().tolist() if res.boxes.id is not None else [None] * len(res.boxes)
+            rows = list(zip(res.boxes.xyxy.tolist(), res.boxes.conf.tolist(), res.boxes.cls.int().tolist(),
+                            res.boxes.id.int().tolist() if res.boxes.id is not None else [None] * len(res.boxes)))
+            if source == "rdd" and self.rdd_near is not None:
+                t0 = time.perf_counter()
+                near = self.rdd_near.predict(frame, conf=conf, imgsz=self.cfg.rdd_near_imgsz,
+                                             device=self.cfg.device, verbose=False)[0]
+                infer += time.perf_counter() - t0
+                rows += [(b, c, k, None) for b, c, k in zip(near.boxes.xyxy.tolist(), near.boxes.conf.tolist(),
+                                                           near.boxes.cls.int().tolist())
+                         if all(k != k2 or _iou(b, b2) < 0.4 for b2, _, k2, _ in rows)]
             cands = []
-            for box, c, cls, tid in zip(res.boxes.xyxy.tolist(), res.boxes.conf.tolist(),
-                                        res.boxes.cls.int().tolist(), ids):
+            for box, c, cls, tid in rows:
                 label = res.names[cls]
                 cat = RDD_MAP.get(label) if source == "rdd" else WORLD_PROMPTS.get(label)
                 if not cat or c < MIN_CONF.get(cat, 0.0):
                     continue
                 x1, y1, x2, y2 = box
                 area = (x2 - x1) * (y2 - y1) / (w * h)
-                if source == "rdd" and (road_hidden or y2 < v_horizon + 0.02 * h):
+                if source == "rdd" and ((road_hidden and c < self.cfg.road_visible_conf) or y2 < v_horizon + 0.02 * h):
                     continue        # submerged road, or a "pothole" on a hillside/wall above the horizon
                 if source == "world" and area > self.cfg.world_max_area and (
                         cat not in SCENE_CATEGORIES or not self.verifier):
@@ -172,6 +182,13 @@ class HazardDetector:
             if progress and duration:
                 progress(min(vt / duration, 1.0))
         return DetectionResult(dets, w, h, n, infer, self.snapshots)
+
+
+def _iou(a, b) -> float:
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    return inter / ((a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter + 1e-9)
 
 
 def snapshot_key(d: Detection):

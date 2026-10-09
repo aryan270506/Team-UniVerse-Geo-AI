@@ -1,0 +1,83 @@
+{
+ "hazards": {
+  "H001": {
+   "at": {
+    "time": "2026-10-09T05:00:00+00:00",
+    "code": 1,
+    "label": "Mainly clear",
+    "icon": "sun",
+    "temp_c": 30.5,
+    "humidity": 47,
+    "precip_mm": 0.0,
+    "snow_cm": 0.0,
+    "cloud": 22,
+    "wind_kmh": 9.0,
+    "gust_kmh": 22.0,
+    "visibility_km": 9.7,
+    "is_day": true
+   },
+   "rain_24h": 0,
+   "rain_72h": 0.2,
+   "source": "Open-Meteo forecast models",
+   "grid": [
+    18.523726,
+    73.78061
+   ],
+   "fetched_at": "2026-10-09T20:36:41+00:00",
+   "flags": []
+  },
+  "H002": {
+   "at": {
+    "time": "2026-10-09T05:00:00+00:00",
+    "code": 1,
+    "label": "Mainly clear",
+    "icon": "sun",
+    "temp_c": 30.5,
+    "humidity": 47,
+    "precip_mm": 0.0,
+    "snow_cm": 0.0,
+    "cloud": 22,
+    "wind_kmh": 9.0,
+    "gust_kmh": 22.0,
+    "visibility_km": 9.7,
+    "is_day": true
+   },
+   "rain_24h": 0,
+   "rain_72h": 0.2,
+   "source": "Open-Meteo forecast models",
+   "grid": [
+    18.523726,
+    73.78061
+   ],
+   "fetched_at": "2026-10-09T20:36:41+00:00",
+   "flags": []
+  },
+  "H003": {
+   "at": {
+    "time": "2026-10-09T05:00:00+00:00",
+    "code": 1,
+    "label": "Mainly clear",
+    "icon": "sun",
+    "temp_c": 30.5,
+    "humidity": 47,
+    "precip_mm": 0.0,
+    "snow_cm": 0.0,
+    "cloud": 22,
+    "wind_kmh": 9.0,
+    "gust_kmh": 22.0,
+    "visibility_km": 9.7,
+    "is_day": true
+   },
+   "rain_24h": 0,
+   "rain_72h": 0.2,
+   "source": "Open-Meteo forecast models",
+   "grid": [
+    18.523726,
+    73.78061
+   ],
+   "fetched_at": "2026-10-09T20:36:41+00:00",
+   "flags": []
+  }
+ },
+ "attribution": "Weather data by Open-Meteo.com (CC BY 4.0)"
+}

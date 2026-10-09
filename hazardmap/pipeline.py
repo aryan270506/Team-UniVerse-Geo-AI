@@ -9,7 +9,7 @@ from typing import Callable
 
 from .aggregate import cluster, geolocate
 from .calibrate import calibrate
-from .config import CAMERA_PRESETS, PipelineConfig, apply_preset
+from .config import CAMERA_PRESETS, PipelineConfig, apply_preset, auto_device
 from .detect import HazardDetector
 from .export import export_run
 from .ingest import Trajectory, iso, load_gps, resolve_video_start, video_info
@@ -20,7 +20,7 @@ _detector_cache: dict = {}
 def get_detector(cfg: PipelineConfig) -> HazardDetector:
     """Models are expensive to load; reuse them across runs in the server.
     Trackers keep state between calls, so reset them for each new video."""
-    key = (cfg.use_world, cfg.device, str(cfg.rdd_weights))
+    key = (cfg.use_world, cfg.device, str(cfg.rdd_weights), cfg.rdd_near_imgsz > 0)
     det = _detector_cache.get(key)
     if det is None:
         det = _detector_cache[key] = HazardDetector(cfg)
@@ -80,7 +80,7 @@ def main():
     ap.add_argument("--offset", type=float, default=0.0, help="seconds to add to video start time")
     ap.add_argument("--video-start", help="ISO time of first frame (overrides metadata)")
     ap.add_argument("--no-world", action="store_true", help="road-damage model only")
-    ap.add_argument("--device", default="mps")
+    ap.add_argument("--device", default=None, help="cuda / mps / cpu (default: best available)")
     ap.add_argument("--camera", choices=list(CAMERA_PRESETS), default="phone",
                     help="camera type preset (field of view, typical tilt, bonnet area)")
     ap.add_argument("--no-auto", action="store_true", help="don't refine pitch from the horizon")
@@ -93,7 +93,7 @@ def main():
     a = ap.parse_args()
 
     cfg = PipelineConfig(sample_fps=a.fps, time_offset_s=a.offset, use_world=not a.no_world,
-                         device=a.device, camera_preset=a.camera, auto_calibrate=not a.no_auto)
+                         device=a.device or auto_device(), camera_preset=a.camera, auto_calibrate=not a.no_auto)
     apply_preset(cfg.camera, a.camera)
     for attr, val in (("height_m", a.cam_height), ("pitch_deg", a.cam_pitch), ("hfov_deg", a.hfov), ("hood_frac", a.hood)):
         if val is not None:

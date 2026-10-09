@@ -28,6 +28,10 @@ NEGATIVE = [
     "a photo of a road sign", "a photo of trees beside a road", "a photo of a standing utility pole with wires",
     "a photo of grass", "a photo of a sidewalk",
     "a photo of a dry dirt road", "a photo of dry red soil and sand",
+    # road-surface damage is found by the RDD model; without these a water-filled pothole
+    # scores as "a large puddle" and the scene check calls the whole road flooded
+    "a photo of a pothole in a road", "a photo of a pothole filled with water",
+    "a photo of a cracked asphalt road", "a photo of a damaged broken road surface",
 ]
 
 

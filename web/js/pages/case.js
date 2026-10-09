@@ -1,4 +1,4 @@
-import { $, $$, api, ago, avatar, catTile, coord, date, esc, icons, mmss, prioTag, short, sla, statusTag, store, toast, ACTION, STATUSES, STATUS_LABEL } from "../core.js";
+import { $, $$, api, ago, authorityName, avatar, catTile, coord, date, esc, icons, mailLinks, mmss, phoneLinks, prioTag, short, sla, statusTag, store, toast, ACTION, STATUSES, STATUS_LABEL } from "../core.js";
 import { addCase, drawRoute, makeMap, renderClosures } from "../map.js";
 
 const NEXT = { new: ["verified", "Verify"], verified: ["assigned", "Assign"], assigned: ["in_progress", "Start work"], in_progress: ["resolved", "Resolve"] };
@@ -6,6 +6,71 @@ const NEXT = { new: ["verified", "Verify"], verified: ["assigned", "Assign"], as
 export default async function render(el, [runId, hazardId]) {
   let data = await api(`/api/cases/${encodeURIComponent(runId)}/${encodeURIComponent(hazardId)}`);
   let map = null;
+  // NHAI offices near this hazard, for the authority override
+  const [lon0, lat0] = data.case.centroid;
+  const offices = (await api(`/api/authorities?lat=${lat0}&lon=${lon0}&n=10`).catch(() => ({ offices: [] }))).offices;
+
+  const reportUrl = (c) => `${location.origin}/report.html?run=${encodeURIComponent(c.run_id)}&hazard=${encodeURIComponent(c.hazard_id)}`;
+  const authorityText = (c) => {
+    const a = c.authority, e = c.escalation;
+    return [`${c.number} · ${c.label} (${c.priority})`, `Location: ${c.centroid[1].toFixed(6)}, ${c.centroid[0].toFixed(6)}`,
+      `Map: https://www.google.com/maps/search/?api=1&query=${c.centroid[1]},${c.centroid[0]}`, `Report: ${reportUrl(c)}`,
+      c.weather ? `Weather at detection: ${c.weather.label}, ${Math.round(c.weather.temp_c)}°C, ${c.weather.rain_24h} mm rain in 24 h${c.weather.flags.length ? ` (${c.weather.flags.join("; ")})` : ""}` : "", "",
+      a ? `Responsible: NHAI ${a.office_code}, ${a.designation}${a.officer_name ? ` (${a.officer_name})` : ""}` : "Responsible: no NHAI office nearby",
+      a ? `Address: ${a.address}` : "", a?.phones.length ? `Phone: ${a.phones.join(" / ")}` : "", a?.emails.length ? `Email: ${a.emails.join(" / ")}` : "",
+      e ? `Escalation: NHAI ${e.office_code}, ${e.designation}${e.phones.length ? `, ${e.phones.join(" / ")}` : ""}` : ""].filter((x, i) => x || i === 5).join("\n");
+  };
+  const mailto = (c) => {
+    const to = [...(c.authority?.emails || []), ...(c.escalation?.emails || [])].slice(0, 1).join(",");
+    const cc = (c.escalation?.emails || []).filter((m) => m !== to).join(",");
+    const q = new URLSearchParams({ subject: `Road hazard ${c.number}: ${c.label} (${c.priority})`, body: authorityText(c) });
+    if (cc) q.set("cc", cc);
+    return `mailto:${to}?${q.toString().replace(/\+/g, "%20")}`;
+  };
+  // weather at capture + 48 h outlook, loaded after first paint
+  let wx;
+  const wxCard = () => {
+    const cell = (cap, val, title = "") => `<div title="${esc(title)}"><span class="tc-cap">${cap}</span><b>${val}</b></div>`;
+    if (wx === undefined) return cell("Weather", "Loading…");
+    const w = wx?.at_capture, o = wx?.outlook;
+    if (!w) return cell("Weather", `<span class="muted">Not available</span>`);
+    const a = w.at;
+    const note = [...w.flags.map((f) => `<span class="chip warn"><i></i>${esc(f)}</span>`),
+      o ? `<span class="tc-cap">Next 48 h: ${o.rain_48h} mm${o.rain_in_h != null ? `, rain in ~${o.rain_in_h} h` : ""} · <b style="color:var(--ink)">${esc(o.advice)}</b></span>` : ""].filter(Boolean);
+    return `
+      ${cell(`Weather${a.is_day ? "" : " · night"}`, `<i data-lucide="${esc(a.icon)}" class="wx" aria-hidden="true"></i> ${Math.round(a.temp_c)}°C ${esc(a.label)}`, `${w.source} · ${wx.attribution}`)}
+      ${cell("Rain 24 h · 72 h", `${w.rain_24h} · ${w.rain_72h} mm`, `${a.precip_mm} mm in the hour of detection`)}
+      ${cell("Wind · gusts", `${a.wind_kmh} · ${a.gust_kmh} km/h`)}
+      ${cell(a.visibility_km == null ? "Humidity" : "Humidity · vis.", `${a.humidity}%${a.visibility_km == null ? "" : ` · ${a.visibility_km} km`}`)}
+      ${note.length ? `<div class="tc-wx-note">${note.join("")}</div>` : ""}`;
+  };
+  const drawWx = () => { const box = $("#wxBody", el); if (box) { box.innerHTML = wxCard(); icons(box); } };
+  const loadWx = () => api(`/api/cases/${encodeURIComponent(runId)}/${encodeURIComponent(hazardId)}/weather`)
+    .then((r) => { wx = r; }).catch(() => { wx = null; }).finally(drawWx);
+
+  const authorityCard = (c) => {
+    const a = c.authority, e = c.escalation;
+    if (!a) return `<section class="card"><div class="section-head"><h2>Responsible authority</h2></div>
+      <p class="muted" style="margin:0">No NHAI office within 300 km of this hazard. Assign the department above.</p></section>`;
+    return `<section class="card">
+      <div class="section-head"><h2>Responsible authority</h2><span class="label">${c.authority_auto ? "Auto · nearest office" : "Set manually"}</span></div>
+      <dl class="facts">
+        <dt>Office</dt><dd><strong>NHAI ${esc(a.office_code)}</strong><br><span class="muted">${esc(a.designation)}</span></dd>
+        ${a.officer_name ? `<dt>Officer</dt><dd>${esc(a.officer_name)}</dd>` : ""}
+        <dt>Address</dt><dd>${esc(a.address)}<br><span class="muted">${esc(a.city)}, ${esc(a.state)} · ${a.distance_km} km from hazard</span></dd>
+        <dt>Phone</dt><dd>${phoneLinks(a) || `<span class="muted">Not listed</span>`}</dd>
+        <dt>Email</dt><dd>${mailLinks(a) || `<span class="muted">Not listed</span>`}</dd>
+        ${e ? `<dt>Escalation</dt><dd>NHAI ${esc(e.office_code)}<br><span class="muted">${esc(e.designation)}, ${esc(e.city)}</span>
+          ${e.phones.length || e.emails.length ? `<br>${[phoneLinks(e), mailLinks(e)].filter(Boolean).join(" · ")}` : ""}</dd>` : ""}
+        ${a.note ? `<dt>Note</dt><dd class="muted">${esc(a.note)}</dd>` : ""}
+      </dl>
+      <div class="actions" style="margin-top:14px">
+        <a class="btn primary" href="${esc(mailto(c))}"><i data-lucide="mail"></i>Email authority</a>
+        <button class="btn" id="copyAuth"><i data-lucide="copy"></i>Copy details</button>
+      </div>
+      <p class="label" style="margin:12px 0 0">Source: NHAI office list, ${esc(a.data_as_of)}. Verify contacts before dispatch.</p>
+    </section>`;
+  };
 
   const draw = () => {
     const { case: c, activity, closure, departments } = data;
@@ -38,16 +103,13 @@ export default async function render(el, [runId, hazardId]) {
               ${sl.overdue ? `<span class="chip warn" style="margin-top:4px"><i></i>Overdue</span>` : ""}</div>
           </div>
           <hr class="divider">
-          <div class="tc-facts">
-            <div><span class="tc-cap">Confidence</span><b>${Math.round(c.confidence * 100)}%</b></div>
-            <div><span class="tc-cap">${c.extent_m >= 15 ? "Extent" : "Frames"}</span><b>${c.extent_m >= 15 ? `${c.extent_m} m` : c.frames}</b></div>
-            <div><span class="tc-cap">GPS</span><b>${esc(c.gps_quality)}</b></div>
-            <div><span class="tc-cap">Drive</span><b title="${esc(c.run_id)}">${esc(c.run_id)}</b></div>
-          </div>
+          <div class="tc-facts" id="wxBody">${wxCard()}</div>
           <hr class="divider">
           <div class="tc-resp">
             ${avatar(c.assignee || c.department, "lg")}
-            <div class="who"><span class="tc-cap">Responsible</span><b>${esc(c.assignee || c.department)}</b></div>
+            <div class="who"><span class="tc-cap">Responsible</span><b>${esc(c.assignee || c.department)}</b>
+              <span class="tc-cap" title="${esc(authorityName(c.authority))}">${c.authority ? `NHAI ${esc(c.authority.office_code)}` : "No NHAI office nearby"}</span></div>
+            ${c.authority?.phones[0] ? `<a class="btn round" href="tel:${c.authority.phones[0].replace(/[^\d+]/g, "")}" aria-label="Call ${esc(c.authority.office_code)}"><i data-lucide="phone"></i></a>` : ""}
             <a class="btn round" href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank" rel="noopener" aria-label="Open in Google Maps"><i data-lucide="map-pin"></i></a>
             <button class="btn round" id="toNote" aria-label="Add a note"><i data-lucide="message-square"></i></button>
           </div>
@@ -66,6 +128,11 @@ export default async function render(el, [runId, hazardId]) {
               <label class="field"><span>Priority</span><select class="select" id="prio">${["P1", "P2", "P3"].map((p) => `<option ${p === c.priority ? "selected" : ""}>${p}</option>`).join("")}</select></label>
               <label class="field"><span>Department</span><select class="select" id="dept">${departments.map((d) => `<option ${d === c.department ? "selected" : ""}>${esc(d)}</option>`).join("")}</select></label>
             </div>
+            <label class="field"><span>Authority (NHAI)</span><select class="select" id="auth">
+              ${c.authority ? "" : `<option value="">No office nearby</option>`}
+              ${[...(c.authority && !offices.some((o) => o.office_code === c.authority.office_code) ? [c.authority] : []), ...offices].map((o) =>
+                `<option value="${esc(o.office_code)}" ${o.office_code === c.authority?.office_code ? "selected" : ""}>${esc(o.office_code)} · ${o.distance_km} km</option>`).join("")}
+            </select></label>
             <label class="field"><span>Owner</span><input class="input" id="owner" value="${esc(c.assignee || "")}" placeholder="Crew / engineer name" maxlength="80"></label>
           </div>
         </section>
@@ -96,6 +163,7 @@ export default async function render(el, [runId, hazardId]) {
         </div>
 
         <div class="stack">
+          ${authorityCard(c)}
           <section class="card">
             <div class="section-head"><h2>Facts</h2></div>
             <dl class="facts">
@@ -159,6 +227,7 @@ export default async function render(el, [runId, hazardId]) {
   };
 
   draw();
+  loadWx();
   el.addEventListener("click", (e) => {
     const s = e.target.closest("[data-set], .step[data-status]");
     if (!s) return;
@@ -169,7 +238,13 @@ export default async function render(el, [runId, hazardId]) {
     if (e.target.id === "prio") save({ priority: e.target.value }, `Priority set to ${e.target.value}`);
     if (e.target.id === "dept") save({ department: e.target.value, status: data.case.status === "verified" || data.case.status === "new" ? "assigned" : undefined },
       `Assigned to ${esc(e.target.value)}`);
+    if (e.target.id === "auth" && e.target.value) save({ authority: e.target.value }, `Authority set to ${esc(e.target.value)}`);
     if (e.target.id === "owner") save({ assignee: e.target.value }, "Owner updated");
+  });
+  el.addEventListener("click", async (e) => {
+    if (!e.target.closest("#copyAuth")) return;
+    try { await navigator.clipboard.writeText(authorityText(data.case)); toast("Authority details copied"); }
+    catch { toast("Couldn't copy: clipboard blocked"); }
   });
   el.addEventListener("click", (e) => { if (e.target.closest("#toNote")) { $("#note", el)?.focus(); $("#note", el)?.scrollIntoView({ behavior: "smooth", block: "center" }); } });
   el.addEventListener("submit", (e) => {

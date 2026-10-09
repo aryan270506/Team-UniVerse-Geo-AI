@@ -169,6 +169,7 @@ input[type=file]::file-selector-button { border: 0; background: #111; color: #ff
 .tile.t-flooding { background: var(--t-flood); } .tile.t-landslide { background: var(--t-landslide); } .tile.t-fallen_tree { background: var(--t-tree); }
 .tile.t-power_line { background: var(--t-power); } .tile.t-debris { background: var(--t-debris); } .tile.t-blockage { background: var(--t-block); }
 .kind { display: inline-flex; align-items: center; gap: var(--s-3); font-weight: 500; }
+.wx { width: 15px; height: 15px; flex: none; vertical-align: -3px; color: var(--ink-2); }
 /* legacy aliases used by older markup */
 .prio { display: inline-flex; } .status { display: inline-flex; }
 

@@ -11,7 +11,7 @@ import math
 import cv2
 import numpy as np
 
-from .config import CALIB_CLASSES
+from .config import CALIB_CLASSES, focal_px
 
 _calib_model = None
 
@@ -78,7 +78,7 @@ def calibrate(video: str, cfg, world_model=None) -> dict:
            "horizon_confidence": conf, "source": "preset"}
     if hz is not None and conf >= 0.4 and frames:
         h, w = frames[0].shape[:2]
-        fy = (w / 2) / math.tan(math.radians(cam.hfov_deg) / 2)
+        fy = focal_px(w, h, cam)
         cam.pitch_deg = float(np.clip(math.degrees(math.atan((h / 2 - hz * h) / fy)), -10.0, 35.0))
         out["source"] = "horizon"
     out["pitch_deg"] = round(cam.pitch_deg, 1)

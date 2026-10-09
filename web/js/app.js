@@ -1,5 +1,5 @@
 // App shell: hash router, nav state, top bar (search, alerts, operator), live-session strip.
-import { $, $$, ago, api, avatar, caseHref, catTile, esc, icons, initials, operator, statusTag, store } from "./core.js";
+import { $, $$, ago, api, avatar, caseHref, catTile, esc, icons, initials, loadMe, logout, operator, statusTag, store } from "./core.js";
 import { initDialogs } from "./dialogs.js";
 
 const routes = {
@@ -9,6 +9,8 @@ const routes = {
   drives: () => import("./pages/drives.js"),
   command: () => import("./pages/command.js"),
   insights: () => import("./pages/insights.js"),
+  users: () => import("./pages/users.js"),
+  market: () => import("./pages/market.js"),
 };
 const ALIASES = { overview: "home", map: "home" };     // links from earlier versions
 
@@ -55,10 +57,7 @@ function showOperator() {
   $("#userName").textContent = name;
   $("#userAvatar").textContent = initials(name);
 }
-const op = $("#operator");
-try { op.value = localStorage.getItem("hm.operator") || ""; } catch { /* storage blocked */ }
-op.addEventListener("input", () => { try { localStorage.setItem("hm.operator", op.value.trim()); } catch { /* ignore */ } showOperator(); });
-showOperator();
+$("#logoutBtn").addEventListener("click", logout);
 
 // ---------- popovers (search results, alerts, user menu)
 const pops = { searchPop: null, bellPop: "#bellBtn", userPop: "#userBtn" };
@@ -68,7 +67,7 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePops(); });
 
-$("#userBtn").addEventListener("click", () => { closePops("userPop"); $("#userPop").hidden = !$("#userPop").hidden; if (!$("#userPop").hidden) op.focus(); });
+$("#userBtn").addEventListener("click", () => { closePops("userPop"); $("#userPop").hidden = !$("#userPop").hidden; });
 
 $("#bellBtn").addEventListener("click", async () => {
   closePops("bellPop");
@@ -93,7 +92,7 @@ search.addEventListener("input", async () => {
   const pop = $("#searchPop");
   if (!q) { pop.hidden = true; return; }
   const { cases } = await store.cases();
-  const hits = cases.filter((c) => `${c.number} ${c.label} ${c.department} ${c.run_id} ${c.status}`.toLowerCase().includes(q)).slice(0, 7);
+  const hits = cases.filter((c) => `${c.number} ${c.label} ${c.department} ${c.authority_code || ""} ${c.authority?.city || ""} ${c.run_id} ${c.status}`.toLowerCase().includes(q)).slice(0, 7);
   pop.innerHTML = hits.map((c) => `<a class="pop-item" href="${caseHref(c)}">${catTile(c.category, "sm")}<span><span class="t">${esc(c.number)} · ${esc(c.label)}</span><span class="m">${esc(c.run_id)}</span></span>${statusTag(c.status)}</a>`).join("")
     || `<div class="pop-empty">No cases match “${esc(q)}”.</div>`;
   pop.hidden = false;
@@ -118,9 +117,24 @@ async function pollLive() {
 }
 setInterval(pollLive, 5000);
 
+// marketplace: flag low voucher stock on the rail
+async function pollStock() {
+  const m = await api("/api/admin/market").catch(() => null);
+  const low = m ? m.items.filter((i) => i.low).length : 0, waiting = m ? m.pending : 0;
+  $("#navLow").hidden = !(low || waiting);
+  $("#navLow").textContent = waiting || "!";
+  $("#navLow").title = waiting ? `${waiting} voucher request${waiting === 1 ? "" : "s"} waiting for a code` : `${low} voucher denomination${low === 1 ? "" : "s"} low on stock`;
+}
+setInterval(pollStock, 60000);
+
 initDialogs();
 icons();
-store.cases().catch(() => {});
-pollLive();
-if (!location.hash) location.hash = "#/home";
-else navigate();
+loadMe().then((me) => {
+  showOperator();
+  $("#userEmail").textContent = me.email;
+  store.cases().catch(() => {});
+  pollLive();
+  pollStock();
+  if (!location.hash) location.hash = "#/home";
+  else navigate();
+}).catch(() => {});                           // api() already sent us to the login page

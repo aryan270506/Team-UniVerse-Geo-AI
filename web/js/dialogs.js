@@ -38,6 +38,7 @@ export function initDialogs() {
     $("#uploadError").hidden = true;
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/process");
+    xhr.setRequestHeader("X-TerraTrace", "1");
     xhr.upload.onprogress = (ev) => {
       if (!ev.lengthComputable) return;
       $("#uploadBar").style.width = `${(ev.loaded / ev.total) * 100}%`;

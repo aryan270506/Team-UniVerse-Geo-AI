@@ -4,7 +4,8 @@ pushed out as events; at the end the session is saved as a normal run.
 Events (dicts passed to `emit`):
   pose    {lat, lon, heading, speed, valid}          every processed frame
   hazard  {feature}                                   on confirmation and on meaningful change
-  frame   {jpeg: base64}                              annotated thumbnail, ~2 per second
+  frame   {jpeg: base64}                              annotated thumbnail, up to ~30 per second
+  boxes   {w, h, dets: [[x1, y1, x2, y2, cat, conf]]}  passthrough mode: detections per processed frame
   stats   {fps, latency_s, frames, hazards, ...}      ~1 per second
   done    {run_id, summary} | error {message}
 """
@@ -68,6 +69,8 @@ class LiveSession:
         self._last_stats = 0.0
         self.latency = 0.0
         self.progress: float | None = None     # 0..1 when the input has a known length
+        self.passthrough = False               # True: the caller streams raw frames to viewers itself
+        self.last_boxes: dict | None = None    # newest detections, echoed back to the phone
         detector.reset()
 
     # ------------------------------------------------------------------ input
@@ -88,7 +91,7 @@ class LiveSession:
         self._last_frame_t = now
         self.latency = latency_s
 
-        changed = []
+        changed, located = [], 0
         with self.lock:
             self.frames += 1
             self.raw += len(dets)
@@ -97,6 +100,7 @@ class LiveSession:
             for d in dets:
                 o = observe(d, pose, w, h, epoch, self.cfg)
                 if o:
+                    located += 1
                     self.obs.append(o)
                     hz = self._fuse(o)
                     if hz not in changed:
@@ -108,7 +112,11 @@ class LiveSession:
                        "speed": round(pose.speed, 1), "t": iso(epoch)})
         for hz in changed:
             self._maybe_emit_hazard(hz)
-        if now - self._last_thumb >= 0.5:
+        if self.passthrough:                      # viewers get the raw camera feed; just send boxes
+            self.last_boxes = {"w": w, "h": h, "t": time.time(), "located": located,
+                               "dets": [[*(round(v) for v in d.box), d.category, round(d.conf, 2)] for d in dets]}
+            self.emit({"type": "boxes", **self.last_boxes})
+        elif now - self._last_thumb >= 1 / 30:
             self._last_thumb = now
             self.emit({"type": "frame", "jpeg": base64.b64encode(annotate(frame, dets, 480)).decode()})
         if now - self._last_stats >= 1.0:

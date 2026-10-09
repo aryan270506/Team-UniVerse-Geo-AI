@@ -25,3 +25,8 @@ runs/eval-*/
 
 # case workflow state (local)
 data/cases.db
+data/platform.db
+data/voucher.key
+
+# regenerable photo thumbnails (route map)
+runs/*/snapshots/thumbs/

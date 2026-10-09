@@ -12,6 +12,9 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; background: #111; color: #fff; font: 14px/1.4 Poppins, system-ui, sans-serif; overflow: hidden; }
     video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #111; }
+    .boxes { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .boxes rect { fill: none; stroke: #ef4444; stroke-width: 3; vector-effect: non-scaling-stroke; }
+    .boxes text { fill: #fff; font: 600 26px/1 Poppins, system-ui, sans-serif; paint-order: stroke; stroke: #ef4444; stroke-width: 8px; stroke-linejoin: round; }
     .top { position: fixed; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top) + 12px) 12px 12px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
     .pill { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 7px 10px; background: rgba(255,255,255,.95); color: #111; border-radius: 10px;
       font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -23,6 +26,7 @@
       background: #fff; color: #111; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
     .hazards b { display: block; font-size: 40px; font-weight: 600; line-height: 1; }
     .hazards span { font-size: 12px; color: #6b7280; }
+    .hint a { color: #111; font-weight: 600; }
     .hint { grid-column: 1 / -1; margin: 0; font-size: 12px; color: #6b7280; }
     .big { width: 112px; height: 64px; border: 0; border-radius: 16px; background: #111; color: #fff; cursor: pointer; font: 600 16px/1 Poppins, sans-serif; }
     .big.stop { background: var(--p1); }
@@ -37,13 +41,14 @@
 </head>
 <body>
   <video id="cam" playsinline muted autoplay></video>
+  <svg class="boxes" id="boxes" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
   <div class="top">
     <span class="pill"><i class="dot" id="netDot"></i><span id="net">offline</span></span>
     <span class="pill"><i class="dot" id="gpsDot"></i><span id="gps">GPS –</span></span>
     <span class="pill"><span id="rate">0 fps</span></span>
     <span class="pill"><span id="lat">– s</span></span>
   </div>
-  <div class="brand"><img src="img/terratrace-logo-light.png" alt="TerraTrace"></div>
+  <a class="brand" href="/app/" aria-label="Back to the TerraTrace app"><img src="img/terratrace-logo-light.png" alt="TerraTrace"></a>
   <div class="bottom">
     <div class="hazards" aria-live="polite"><b id="hz">0</b><span>Hazards mapped</span></div>
     <button class="big" id="go" aria-label="Start streaming">Start</button>

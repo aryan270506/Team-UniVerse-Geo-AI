@@ -93,7 +93,8 @@ def export_run(out: Path, hazards: list[Hazard], obs: list[Observation], snapsho
         "by_severity": dict(Counter(f["properties"]["severity"] for f in features)),
         "device": cfg.device,
         "route_km": round(route_m / 1000, 2),
-        "bbox": [float(np.nanmin(lons)), float(np.nanmin(lats)), float(np.nanmax(lons)), float(np.nanmax(lats))],
+        "bbox": ([float(np.nanmin(lons)), float(np.nanmin(lats)), float(np.nanmax(lons)), float(np.nanmax(lats))]
+                 if np.isfinite(lons).any() else None),          # no GPS at all: nothing to bound
         "config": cfg_dict(cfg),
     }
     if media:

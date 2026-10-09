@@ -1,10 +1,12 @@
 """Pipeline configuration: camera model, detection classes, severity weights."""
+import os
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT / "models"
-RUNS_DIR = ROOT / "runs"
+RUNS_DIR = Path(os.environ.get("TERRATRACE_RUNS_DIR") or ROOT / "runs")   # override for tests / separate instances
 
 
 @dataclass
@@ -24,6 +26,13 @@ CAMERA_PRESETS = {
     "dashcam": {"hfov_deg": 105.0, "height_m": 1.3, "pitch_deg": 3.0,  "hood_frac": 0.12},
     "action":  {"hfov_deg": 120.0, "height_m": 1.5, "pitch_deg": 22.0, "hood_frac": 0.3},
 }
+
+
+def focal_px(width: int, height: int, cam: "CameraConfig") -> float:
+    """Focal length in pixels. hfov is the lens's long-side FOV, so a phone held in
+    portrait (height > width) keeps the same lens geometry."""
+    import math
+    return (max(width, height) / 2) / math.tan(math.radians(cam.hfov_deg) / 2)
 
 
 def apply_preset(cam: "CameraConfig", name: str) -> None:
@@ -99,6 +108,39 @@ ROAD_SURFACE = {"pothole", "crack", "alligator_crack"}
 MIN_CONF = {"crack": 0.35, "alligator_crack": 0.30}
 
 
+@lru_cache(maxsize=1)
+def auto_device() -> str:
+    """Best available compute: TERRATRACE_DEVICE, else NVIDIA CUDA, Apple MPS, then CPU."""
+    env = os.environ.get("TERRATRACE_DEVICE", "").strip()
+    if env:
+        return env
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda"
+        if torch.backends.mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return "cpu"
+
+
+# Speed/accuracy profiles. Measured per frame (data/india clip): on an Apple M5 GPU 'full' runs
+# ~15 fps; on CPU 'full' ~4.5 fps, 'balanced' ~9 fps, 'lite' ~30 fps. Budget laptop CPUs are
+# roughly 3-4x slower than that. 'lite' only finds road-surface damage (no flood/tree/debris).
+PROFILES = {
+    "full": {},
+    "balanced": {"rdd_imgsz": 960, "rdd_near_imgsz": 0},
+    "lite": {"rdd_imgsz": 640, "rdd_near_imgsz": 0, "use_world": False},
+}
+
+
+def auto_profile(device: str) -> str:
+    """TERRATRACE_PROFILE, else 'full' on a GPU and 'balanced' on CPU-only machines."""
+    env = os.environ.get("TERRATRACE_PROFILE", "").strip().lower()
+    return env if env in PROFILES else ("full" if device != "cpu" else "balanced")
+
+
 @dataclass
 class PipelineConfig:
     sample_fps: float = 5.0
@@ -116,9 +158,12 @@ class PipelineConfig:
     scene_thresholds: dict = field(default_factory=lambda: {"flooding": 0.55, "landslide": 0.65})
     scene_window: int = 5          # a scene hazard needs >= scene_min_hits of the last scene_window frames
     scene_min_hits: int = 3
+    road_visible_conf: float = 0.35  # RDD boxes this confident survive a flood/landslide scene flag
     road_min_frames: int = 3       # potholes/cracks must persist longer than other hazards
-    device: str = "mps"
+    device: str = field(default_factory=auto_device)
+    profile: str = ""              # full | balanced | lite ('' = auto for the device)
     rdd_imgsz: int = 1280          # potholes/cracks are small; need the resolution
+    rdd_near_imgsz: int = 640      # second pass for damage close to the camera, too big for 1280 (0 = off)
     world_imgsz: int = 640
     road_half_width_m: float = 6.0  # road-surface damage further sideways is on a verge/hillside
     cluster_eps_m: float = 8.0
@@ -129,3 +174,8 @@ class PipelineConfig:
     camera: CameraConfig = field(default_factory=CameraConfig)
     rdd_weights: Path = MODELS_DIR / "rdd_yolov8s.pt"
     world_weights: Path = MODELS_DIR / "yolov8s-worldv2.pt"
+
+    def __post_init__(self):
+        self.profile = self.profile if self.profile in PROFILES else auto_profile(self.device)
+        for k, v in PROFILES[self.profile].items():
+            setattr(self, k, v)

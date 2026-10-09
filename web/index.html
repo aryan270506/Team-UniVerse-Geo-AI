@@ -24,6 +24,8 @@
         <li><a href="#/drives" data-route="drives" aria-label="Drives"><i data-lucide="file-text"></i><span class="tip">Survey drives</span></a></li>
         <li><a href="#/command" data-route="command" aria-label="Command"><i data-lucide="radar"></i><span class="tip">Command · AI view</span></a></li>
         <li><a href="#/insights" data-route="insights" aria-label="Insights"><i data-lucide="chart-column"></i><span class="tip">Insights</span></a></li>
+        <li><a href="#/users" data-route="users" aria-label="Contributors"><i data-lucide="users"></i><span class="tip">Contributors &amp; coins</span></a></li>
+        <li><a href="#/market" data-route="market" aria-label="Marketplace"><i data-lucide="gift"></i><span class="tip">Rewards marketplace</span><span class="badge" id="navLow" hidden>!</span></a></li>
       </ul>
       <div class="rail-foot">
         <button class="rail-btn" id="goLiveBtn" aria-label="Go live"><i data-lucide="radio"></i><span class="live-dot" id="liveDot" hidden></span></button>
@@ -47,8 +49,11 @@
           <div style="position:relative">
             <button class="user" id="userBtn" aria-haspopup="true"><span class="avatar" id="userAvatar">CR</span><span class="name" id="userName">Control room</span><i data-lucide="chevron-down"></i></button>
             <div class="pop right" id="userPop" hidden>
-              <div class="pop-head">Operator</div>
-              <label class="field"><span>Name shown in the activity log</span><input class="input" id="operator" maxlength="40" placeholder="Control room"></label>
+              <div class="pop-head">Signed in as admin</div>
+              <p class="muted" id="userEmail" style="margin:0 0 12px;font-size:var(--fs-sm)"></p>
+              <p class="muted" style="margin:0 0 12px;font-size:var(--fs-xs)">Your name is recorded on every case change.</p>
+              <a class="btn sm block" href="/app/" style="margin-bottom:8px"><i data-lucide="smartphone"></i>Contributor app</a>
+              <button class="btn sm block" id="logoutBtn"><i data-lucide="log-out"></i>Sign out</button>
             </div>
           </div>
         </div>

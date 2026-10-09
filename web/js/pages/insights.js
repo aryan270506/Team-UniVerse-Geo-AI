@@ -42,6 +42,15 @@ export default async function render(el) {
           ${bars(Object.entries(o.by_department).sort((a, b) => b[1] - a[1]))}
         </section>
         <section class="card">
+          <div class="section-head"><h2>Top contributors</h2><span class="label">coins this week · <a href="#/users">all</a></span></div>
+          ${o.vouchers?.n ? `<p class="muted" style="margin:0 0 12px">${o.vouchers.n} voucher${o.vouchers.n === 1 ? "" : "s"} redeemed · ₹${o.vouchers.inr.toLocaleString("en-IN")} · <a href="#/market">marketplace</a></p>` : ""}
+          ${(o.top_contributors || []).length ? bars(o.top_contributors) : `<p class="muted" style="margin:0">No contributor coins this week yet.</p>`}
+        </section>
+        <section class="card">
+          <div class="section-head"><h2>Authorities</h2><span class="label">open · NHAI</span></div>
+          ${bars(Object.entries(o.by_authority || {}).sort((a, b) => b[1] - a[1]).slice(0, 8)) }
+        </section>
+        <section class="card">
           <div class="section-head"><h2>Activity</h2></div>
           <ol class="feed">${o.activity.slice(0, 8).map((a) => {
             const [run, hid] = a.case_id.split("/");

@@ -11,14 +11,13 @@ from collections import deque
 
 import numpy as np
 
-from .config import PipelineConfig
+from .config import PipelineConfig, focal_px
 
 
 def road_rows(height: int, width: int, cfg: PipelineConfig) -> tuple[int, int]:
     """Image rows spanning the visible road: just below the horizon down to the bonnet."""
     cam = cfg.camera
-    fy = (width / 2) / math.tan(math.radians(cam.hfov_deg) / 2)
-    horizon = height / 2 - fy * math.tan(math.radians(cam.pitch_deg))
+    horizon = height / 2 - focal_px(width, height, cam) * math.tan(math.radians(cam.pitch_deg))
     top = int(np.clip(horizon + 0.03 * height, 0.05 * height, 0.7 * height))
     bottom = int(height * (1 - cam.hood_frac))
     if bottom - top < 0.15 * height:
@@ -28,8 +27,7 @@ def road_rows(height: int, width: int, cfg: PipelineConfig) -> tuple[int, int]:
 
 def horizon_row(height: int, width: int, cfg: PipelineConfig) -> float:
     cam = cfg.camera
-    fy = (width / 2) / math.tan(math.radians(cam.hfov_deg) / 2)
-    return height / 2 - fy * math.tan(math.radians(cam.pitch_deg))
+    return height / 2 - focal_px(width, height, cam) * math.tan(math.radians(cam.pitch_deg))
 
 
 class SceneGate:

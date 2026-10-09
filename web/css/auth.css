@@ -1,0 +1,15 @@
+/* Sign-in / register pages: one centred card on the brand canvas. */
+.auth-page { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: var(--canvas); }
+.auth-card { width: 100%; max-width: 420px; background: var(--surface); border-radius: 28px; padding: 32px 28px; box-shadow: 0 10px 40px rgba(17, 17, 17, .06); }
+.auth-card .logo { height: 26px; width: auto; display: block; margin-bottom: 26px; }
+.auth-card h1 { font-size: var(--fs-2xl); font-weight: 600; margin: 0 0 6px; letter-spacing: -.01em; }
+.auth-card .lead { color: var(--ink-2); margin: 0 0 22px; font-size: var(--fs-md); }
+.auth-card form { display: grid; gap: 14px; }
+.auth-card .btn.primary { width: 100%; justify-content: center; height: 48px; font-size: var(--fs-md); margin-top: 6px; }
+.auth-card .switch { margin: 18px 0 0; text-align: center; color: var(--ink-2); font-size: var(--fs-sm); }
+.auth-card .switch a { color: var(--ink); font-weight: 600; }
+.auth-card .err { margin: 0; padding: 10px 12px; border-radius: 12px; background: #fdecec; color: #b42318; font-size: var(--fs-sm); }
+.auth-card .hint { color: var(--ink-3); font-size: var(--fs-xs); margin-top: -6px; }
+.auth-perks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 22px; }
+.auth-perks div { background: var(--surface-2); border-radius: 14px; padding: 10px; font-size: var(--fs-xs); color: var(--ink-2); }
+.auth-perks b { display: block; color: var(--ink); font-size: var(--fs-md); }

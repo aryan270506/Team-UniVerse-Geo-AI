@@ -1,0 +1,57 @@
+{
+ "hazards": {
+  "H001": {
+   "at": {
+    "time": "2017-06-20T05:00:00+00:00",
+    "code": 2,
+    "label": "Partly cloudy",
+    "icon": "cloud-sun",
+    "temp_c": 8.9,
+    "humidity": 67,
+    "precip_mm": 0.0,
+    "snow_cm": 0.0,
+    "cloud": 58,
+    "wind_kmh": 4.0,
+    "gust_kmh": 25.0,
+    "visibility_km": null,
+    "is_day": true
+   },
+   "rain_24h": 1.8,
+   "rain_72h": 2.7,
+   "source": "ERA5 reanalysis (Open-Meteo archive)",
+   "grid": [
+    32.37258,
+    77.22087
+   ],
+   "fetched_at": "2026-10-09T20:36:40+00:00",
+   "flags": []
+  },
+  "H002": {
+   "at": {
+    "time": "2017-06-20T05:00:00+00:00",
+    "code": 2,
+    "label": "Partly cloudy",
+    "icon": "cloud-sun",
+    "temp_c": 8.9,
+    "humidity": 67,
+    "precip_mm": 0.0,
+    "snow_cm": 0.0,
+    "cloud": 58,
+    "wind_kmh": 4.0,
+    "gust_kmh": 25.0,
+    "visibility_km": null,
+    "is_day": true
+   },
+   "rain_24h": 1.8,
+   "rain_72h": 2.7,
+   "source": "ERA5 reanalysis (Open-Meteo archive)",
+   "grid": [
+    32.37258,
+    77.22087
+   ],
+   "fetched_at": "2026-10-09T20:36:40+00:00",
+   "flags": []
+  }
+ },
+ "attribution": "Weather data by Open-Meteo.com (CC BY 4.0)"
+}
