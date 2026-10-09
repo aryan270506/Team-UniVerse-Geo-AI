@@ -35,6 +35,36 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/uvicorn server.app:app --port 8000   # → http://localhost:8000
 ```
 
+## Hazard CRM (dashboard)
+
+Soft tracking-dashboard design (light canvas, black icon rail, white rounded cards, pastel gradient panels, pill status chips, Poppins). Every hazard the AI confirms becomes a **case** (`HM-0001`…) that departments work through:
+
+`NEW → VERIFIED → ASSIGNED → IN PROGRESS → RESOLVED`
+
+- **Priority:** P1/P2/P3 is taken from the hazard's severity.
+- **Department:** set from the hazard type (roads, disaster management, electricity board…).
+- **Activity log:** every change is recorded with the operator name set in the sidebar.
+
+| Page | What it is |
+|---|---|
+| Home | Tracking view: process a new drive, selected case card (detected → target fix, responsible department), case list, live map |
+| Cases | Filterable table across all drives, CSV export |
+| Board | Kanban; drag a card to change status |
+| Drives | Survey drives with a health grade, report and GeoJSON |
+| Command | Synced AI video + map + live alerts (playback or live) |
+| Insights | Network health, pipeline, department load, activity |
+
+Case state lives in `data/cases.db` (SQLite, git-ignored). Cases are created automatically from `runs/*/hazards.geojson`. API: `GET /api/cases`, `GET|PATCH /api/cases/<run>/<hazard>`, `GET /api/overview`.
+
+Frontend: plain ES modules with no build step. Design tokens are in `web/css/tokens.css` (palette, type scale, radii, shadows, gradients, status colours); components and pages build only on those tokens.
+
+## Mission control, alerts, report
+
+- **◉ Mission control:** the AI-view video sits beside the map. It is rendered per run as `annotated.mp4`, with detection boxes, flood/landslide tint and a HUD (time, speed, GPS, hazard count). It is synced through `timeline.json`: as the video plays, the vehicle moves on the map, hazard pins drop and alert cards slide in (with sound). Clicking a coloured tick on the timeline jumps to that hazard.
+- **Road health:** an A–F grade from hazard severity per km, hazards-by-type bars, and route segments coloured by condition.
+- **Closures & detours:** blocking hazards (flood, landslide, fallen tree, power line, debris, blockage) are shown as closed. A detour that keeps clear of the hazard is requested from the public OSRM router (`/api/runs/<id>/closures`, cached).
+- **Report:** a printable incident report (`report.html?run=<id>[&hazard=H001]`) with an urgency banner, map, closures, and per-hazard photo, location, recommended action and responsible department. "Save as PDF" produces the file for authorities.
+
 ## Live mode (real time)
 
 **+ Process drive** uses the same streaming engine at full GPU speed: every frame is analysed (none are dropped), and you watch the vehicle and its hazards appear on the map with a progress bar. The saved run is identical to the CLI batch output.
@@ -47,10 +77,16 @@ Click **● Go live** in the dashboard:
 Phones only allow camera and GPS on HTTPS pages, so phone mode needs the HTTPS server (phone and laptop on the same Wi-Fi or hotspot):
 
 ```bash
-tools/make_cert.sh                      # self-signed cert for localhost + this machine's LAN IPs
-.venv/bin/uvicorn server.app:app --host 0.0.0.0 --port 8443 --ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem
+tools/make_cert.sh                      # self-signed cert for localhost + this machine's LAN IPs (re-run if the Wi-Fi IP changes)
+.venv/bin/uvicorn server.app:app --host 0.0.0.0 --port 8443 --ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem --reload --reload-dir hazardmap --reload-dir server
+.venv/bin/uvicorn server.redirect:app --port 8000   # optional: http://localhost:8000 forwards to https://localhost:8443
 # laptop: https://localhost:8443  ·  phone: scan the QR code (accept the certificate warning once)
 ```
+
+If the phone can't open the link:
+- **Same network:** the phone and laptop must be on the same network. Many college/office Wi-Fi networks block device-to-device traffic; connect the laptop to the phone's hotspot instead, then re-run `tools/make_cert.sh` and restart (the IP changes).
+- **Certificate warning:** accept it on the phone (Chrome: *Advanced → Proceed*; Safari: *Show details → visit this website*).
+- **Permissions:** allow both camera and location when the phone asks.
 
 How it works:
 - **Frames:** if inference falls behind, older frames are dropped, so latency stays bounded.

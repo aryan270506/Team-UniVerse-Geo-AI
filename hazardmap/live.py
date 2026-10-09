@@ -39,12 +39,13 @@ class LiveHazard(Hazard):
 class LiveSession:
     def __init__(self, cfg: PipelineConfig, run_id: str, mode: str, detector,
                  pose_fn: Callable[[float], Pose], trajectory_fn: Callable[[], dict],
-                 emit: Callable[[dict], None], meta: dict | None = None):
+                 emit: Callable[[dict], None], meta: dict | None = None, source_video: str | None = None):
         self.cfg, self.run_id, self.mode = cfg, run_id, mode
         self.det = detector
         self.pose_fn, self.trajectory_fn = pose_fn, trajectory_fn
         self.emit = emit
         self.meta = meta or {}
+        self.source_video = source_video
         self.out = RUNS_DIR / run_id
         (self.out / "snapshots").mkdir(parents=True, exist_ok=True)
 
@@ -59,6 +60,7 @@ class LiveSession:
         self.size = (0, 0)
         self.started = time.time()
         self.first_epoch: float | None = None
+        self._first_vt: float | None = None
         self.last_epoch: float | None = None
         self._fps_ema = 0.0
         self._last_frame_t = None
@@ -72,7 +74,8 @@ class LiveSession:
     def feed(self, frame: np.ndarray, epoch: float, idx: int, vt: float, latency_s: float = 0.0):
         h, w = frame.shape[:2]
         self.size = (w, h)
-        self.first_epoch = self.first_epoch if self.first_epoch is not None else epoch
+        if self.first_epoch is None:
+            self.first_epoch, self._first_vt = epoch, vt
         self.last_epoch = epoch
         dets, secs = self.det.detect_frame(frame, idx, vt)
         self.infer_s += secs
@@ -209,7 +212,9 @@ class LiveSession:
             "raw_detections": self.raw,
             "inference_fps": round(self.frames / self.infer_s, 1) if self.infer_s else 0.0,
             "wall_time_s": round(time.time() - self.started, 1),
-        })
+        }, media=None if self.first_epoch is None else {
+            "pose_fn": self.pose_fn, "t0": self.first_epoch - (self._first_vt or 0.0),
+            "duration": duration + (self._first_vt or 0.0), "video": self.source_video})
         for f in self.out.glob("snapshots/live-*.jpg"):    # superseded by H*.jpg
             f.unlink()
         return summary

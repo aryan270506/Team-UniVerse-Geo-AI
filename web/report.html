@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hazard Incident Report</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root { --ink: #111; --ink-2: #6b7280; --line: #ececf0; --canvas: #f1f1f3; --p1: #ef4444; --p2: #f59e0b; --p3: #10b981; color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); font: 13px/1.55 Poppins, system-ui, sans-serif; font-feature-settings: "tnum" 1; }
+    .toolbar { position: sticky; top: 0; z-index: 1000; display: flex; gap: 8px; justify-content: flex-end; padding: 12px 24px; background: rgba(241,241,243,.9); backdrop-filter: blur(6px); }
+    .toolbar button { font: 500 13px Poppins, sans-serif; border: 1px solid var(--line); padding: 10px 16px; cursor: pointer; background: #fff; color: var(--ink); border-radius: 12px; }
+    .toolbar .primary { background: #111; border-color: #111; color: #fff; }
+    .page { max-width: 900px; margin: 12px auto 32px; background: #fff; padding: 40px 48px; border-radius: 24px; box-shadow: 0 1px 2px rgba(17,17,17,.04), 0 10px 30px rgba(17,17,17,.06); }
+    header.r { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+    .brand { display: flex; gap: 14px; align-items: center; }
+    .logo { width: 44px; height: 44px; border-radius: 12px; background: #111; position: relative; flex: none; }
+    .logo::after { content: ""; position: absolute; right: 8px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--p1); }
+    h1 { font-size: 24px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+    .sub { font-size: 12px; color: var(--ink-2); }
+    .stamp { text-align: right; font-size: 12px; color: var(--ink-2); }
+    .stamp b { display: block; font-size: 13px; color: var(--ink); font-weight: 600; }
+    .urgent { margin-top: 18px; padding: 12px 16px; border-radius: 14px; background: #fff5f5; color: #b91c1c; font-weight: 500; border: 1px solid #fecaca; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0; }
+    .kpi { padding: 14px 16px; border-radius: 16px; background: #f7f7f9; }
+    .kpi .v { font-size: 24px; font-weight: 600; line-height: 1.1; }
+    .kpi .k { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+    .kpi.alert { background: linear-gradient(120deg, #fff1e6, #fde8ef); } .kpi.alert .v { color: #b91c1c; }
+    h2 { font-size: 15px; font-weight: 600; margin: 28px 0 12px; }
+    #map { height: 320px; border-radius: 18px; overflow: hidden; }
+    #map .leaflet-tile-pane { filter: saturate(.55) brightness(1.04); }
+    .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 24px; font-size: 12.5px; }
+    .meta b { color: var(--ink-2); font-weight: 400; margin-right: 6px; }
+    .hz { display: grid; grid-template-columns: 220px 1fr; gap: 18px; border-radius: 18px; padding: 14px; margin-bottom: 12px; break-inside: avoid; background: #f7f7f9; }
+    .hz.P1 { background: #fff5f5; }
+    .hz img { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 12px; background: #111; }
+    .hz h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: 8px; border: 1px solid #d9d9df; background: #fff; text-transform: capitalize; }
+    .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--p3); }
+    .badge.high::before { background: var(--p1); } .badge.medium::before { background: var(--p2); }
+    dl { display: grid; grid-template-columns: auto 1fr; gap: 0 14px; margin: 6px 0 0; font-size: 12.5px; }
+    dt { color: var(--ink-2); padding: 3px 0; } dd { margin: 0; padding: 3px 0; font-weight: 500; }
+    .mono { font-variant-numeric: tabular-nums; }
+    .action { margin-top: 10px; padding: 8px 12px; border-radius: 10px; background: #111; color: #fff; font-weight: 500; font-size: 12.5px; }
+    .closure { padding: 10px 14px; border-radius: 14px; background: #f0fdf4; margin-bottom: 8px; }
+    footer.r { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 11px; display: flex; justify-content: space-between; gap: 24px; }
+    a { color: var(--ink); font-weight: 500; }
+    .sig { margin-top: 34px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; font-size: 12px; color: var(--ink-2); }
+    .sig div { border-top: 1px solid #c9c9d1; padding-top: 6px; }
+    .leaflet-tooltip { border-radius: 8px; font: 600 11px Poppins, sans-serif; }
+    @media print { body { background: #fff; } .toolbar { display: none; } .page { box-shadow: none; margin: 0; padding: 0; max-width: none; border-radius: 0; } @page { size: A4; margin: 14mm; } }
+    @media (max-width: 720px) { .page { padding: 20px 16px; border-radius: 0; } .kpis { grid-template-columns: 1fr 1fr; } .hz { grid-template-columns: 1fr; } .meta { grid-template-columns: 1fr; } header.r { grid-template-columns: 1fr; } .stamp { text-align: left; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="ghost" onclick="window.close()">Close</button>
+    <button class="primary" id="printBtn">⬇ Save as PDF / Print</button>
+  </div>
+  <main class="page" id="page">
+    <header class="r">
+      <div class="brand"><span class="logo" aria-hidden="true"></span>
+        <div><div class="sub">HazardMap · Incident report</div><h1 id="title">Road Hazard Incident Report</h1></div></div>
+      <div class="stamp"><b id="refNo"></b><span id="genAt"></span></div>
+    </header>
+    <div class="urgent" id="urgent" hidden></div>
+    <section class="kpis" id="kpis"></section>
+    <h2 data-n="01">Location overview</h2>
+    <div id="map"></div>
+    <h2 data-n="02">Survey details</h2>
+    <div class="meta" id="meta"></div>
+    <h2 id="closuresHead" data-n="03" hidden>Road closures &amp; detours</h2>
+    <div id="closures"></div>
+    <h2 data-n="04">Hazards requiring action</h2>
+    <div id="hazards"></div>
+    <div class="sig"><div>Verified by (field officer)</div><div>Forwarded to (department / date)</div></div>
+    <footer class="r"><span>Generated automatically by HazardMap. Coordinates WGS84; detections are AI-generated and should be field-verified.</span><span id="foot"></span></footer>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const CAT = { pothole: "Pothole", crack: "Crack", alligator_crack: "Alligator crack", flooding: "Flooding", fallen_tree: "Fallen tree",
+      power_line: "Power line down", debris: "Debris", landslide: "Landslide", blockage: "Blockage" };
+    const ACTION = { pothole: "Schedule patching; mark hazard for 2-wheelers", crack: "Add to resurfacing plan", alligator_crack: "Inspect base layer; resurface",
+      flooding: "Close road / divert traffic; deploy dewatering pumps", fallen_tree: "Dispatch tree-clearing crew", power_line: "Alert electricity utility; cordon off area",
+      debris: "Dispatch clearing crew", landslide: "Close road; dispatch earth-moving equipment", blockage: "Verify barricade; issue traffic advisory" };
+    const DEPT = { pothole: "Roads dept. (PWD / municipal)", crack: "Roads dept. (PWD / municipal)", alligator_crack: "Roads dept. (PWD / municipal)",
+      flooding: "Disaster management cell + storm-water dept.", fallen_tree: "Municipal tree authority / forest dept.", power_line: "State electricity board",
+      debris: "Municipal solid-waste / roads dept.", landslide: "Disaster management (SDMA) + BRO/PWD", blockage: "Traffic police" };
+    const SEV_COL = { high: "#ef4444", medium: "#f59e0b", low: "#10b981" };
+    const PEN = { high: 25, medium: 10, low: 3 };
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const $ = (s) => document.querySelector(s);
+    const q = new URLSearchParams(location.search);
+    const runId = q.get("run"), only = q.get("hazard");
+
+    (async () => {
+      const run = await fetch(`/api/runs/${encodeURIComponent(runId)}`).then((r) => r.json());
+      const closures = await fetch(`/api/runs/${encodeURIComponent(runId)}/closures`).then((r) => r.json()).catch(() => ({ closures: [] }));
+      const s = run.summary;
+      let feats = run.hazards.features.slice().sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.properties.severity] - { high: 0, medium: 1, low: 2 }[b.properties.severity]));
+      if (only) feats = feats.filter((f) => f.properties.id === only);
+      const high = feats.filter((f) => f.properties.severity === "high");
+      const pen = run.hazards.features.reduce((a, f) => a + PEN[f.properties.severity], 0);
+      const score = Math.max(0, Math.min(100, Math.round(100 - pen / Math.max(s.route_km || 0, 0.2))));
+      const grade = score >= 85 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 40 ? "D" : "F";
+
+      document.title = `Incident report ${runId}`;
+      $("#title").textContent = only ? `Hazard Incident Report · ${only}` : "Road Hazard Incident Report";
+      $("#refNo").textContent = `Ref. HM-${runId}${only ? "-" + only : ""}`;
+      $("#genAt").textContent = `Generated ${new Date().toLocaleString()}`;
+      $("#foot").textContent = `hazards.geojson · ${run.hazards.features.length} features`;
+      if (high.length) {
+        $("#urgent").hidden = false;
+        $("#urgent").textContent = `URGENT: ${high.length} high-severity hazard${high.length > 1 ? "s" : ""} (${[...new Set(high.map((f) => CAT[f.properties.category]))].join(", ")}). Immediate action recommended.`;
+      }
+      $("#kpis").innerHTML = [["Hazards", feats.length, ""], ["High severity", high.length, high.length ? "alert" : ""],
+        ["Route surveyed", `${s.route_km} km`, ""], ["Road health", `${grade} · ${score}/100`, score < 55 ? "alert" : ""]]
+        .map(([k, v, c]) => `<div class="kpi ${c}"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
+      $("#meta").innerHTML = `
+        <div><b>Survey start:</b> ${new Date(s.video_start).toLocaleString()}</div>
+        <div><b>Duration:</b> ${s.duration_s}s · ${s.frames_processed} frames analysed</div>
+        <div><b>Source video:</b> ${esc(s.video)}</div><div><b>GPS log:</b> ${esc(s.gps)}</div>
+        <div><b>Camera:</b> ${esc(s.config?.camera_preset || "")} preset</div>
+        <div><b>Detection:</b> YOLOv8 road damage + open-vocabulary hazards + CLIP scene check</div>`;
+
+      // map: light street tiles print well
+      const map = L.map("map", { zoomControl: false, attributionControl: true });
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
+      const g = L.featureGroup().addTo(map);
+      for (const f of run.trajectory.features) L.polyline(f.geometry.coordinates.map(([x, y]) => [y, x]), { color: "#111", weight: 5 }).addTo(g);
+      feats.forEach((f, i) => {
+        const [lon, lat] = f.properties.centroid;
+        if (f.geometry.type === "LineString") L.polyline(f.geometry.coordinates.map(([x, y]) => [y, x]), { color: SEV_COL[f.properties.severity], weight: 8 }).addTo(g);
+        L.circleMarker([lat, lon], { radius: 9, color: "#fff", weight: 2, fillColor: SEV_COL[f.properties.severity], fillOpacity: 1 })
+          .bindTooltip(f.properties.id, { permanent: true, direction: "top", className: "lbl" }).addTo(g);
+      });
+      const cl = (closures.closures || []).filter((c) => !only || c.hazard_id === only);
+      for (const c of cl) if (c.detour) L.polyline(c.detour.coords.map(([x, y]) => [y, x]), { color: "#46a758", weight: 4, dashArray: "8 6" }).addTo(g);
+      map.fitBounds(g.getBounds(), { padding: [30, 30], maxZoom: 17 });
+
+      if (cl.length) {
+        $("#closuresHead").hidden = false;
+        $("#closures").innerHTML = cl.map((c) => `<div class="closure">✕ <b>${esc(CAT[c.category])}</b> (${esc(c.hazard_id)}) blocks the road.
+          ${c.detour ? `Detour available: <b>${c.detour.km} km, ~${c.detour.minutes} min</b> (green dashed on the map).` : "<b>No alternative road found</b>; prioritise clearing."}</div>`).join("");
+      }
+
+      $("#hazards").innerHTML = feats.map((f) => {
+        const p = f.properties, [lon, lat] = p.centroid;
+        const img = p.snapshot ? `<img src="/runs/${encodeURIComponent(runId)}/${esc(p.snapshot)}" alt="Detection frame for ${esc(p.id)}">` : "<div></div>";
+        return `<article class="hz ${{ high: "P1", medium: "P2", low: "P3" }[p.severity]}">${img}<div>
+          <h3>${esc(p.id)} · ${esc(CAT[p.category] || p.category)} <span class="badge ${p.severity}">${p.severity}</span></h3>
+          <dl>
+            <dt>Location</dt><dd class="mono">${lat.toFixed(6)}, ${lon.toFixed(6)} · <a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}">open map</a></dd>
+            <dt>First seen</dt><dd>${new Date(p.first_seen).toLocaleString()} (video ${p.video_time_s}s)</dd>
+            <dt>Confidence</dt><dd>${(p.confidence * 100).toFixed(0)}% over ${p.frames} frames</dd>
+            ${p.extent_m >= 15 ? `<dt>Extent</dt><dd>${p.extent_m} m along the road</dd>` : ""}
+            <dt>Department</dt><dd>${esc(DEPT[p.category] || "Roads dept.")}</dd>
+          </dl>
+          <div class="action">Recommended: ${esc(ACTION[p.category] || "Inspect")}</div></div></article>`;
+      }).join("") || "<p>No hazards in this report.</p>";
+
+      $("#printBtn").onclick = () => window.print();
+      if (q.get("print") === "1") setTimeout(() => window.print(), 1200);
+    })();
+  </script>
+</body>
+</html>

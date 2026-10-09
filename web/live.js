@@ -40,7 +40,7 @@ function connect() {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/live/${encodeURIComponent(sessionId)}/ingest`);
     ws.binaryType = "arraybuffer";
     ws.onopen = () => { setNet("ok", "connected"); resolve(); };
-    ws.onerror = () => reject(new Error("Could not reach the HazardMap server"));
+    ws.onerror = () => reject(new Error("Could not open the live connection to the laptop. Check the phone is on the same Wi-Fi/hotspot and the HazardMap HTTPS server is running."));
     ws.onclose = () => { setNet("bad", "disconnected"); inflight = false; if (running) setTimeout(reconnect, 1500); };
     ws.onmessage = (m) => {
       const msg = JSON.parse(m.data);
@@ -93,10 +93,25 @@ function onPosition(pos) {
   }
 }
 
+async function checkSession() {
+  if (!sessionId) return;
+  const r = await fetch(`/api/live/${encodeURIComponent(sessionId)}`).catch(() => null);
+  if (!r) return setNet("bad", "server unreachable");
+  if (r.status === 404) {
+    sessionId = null;                     // stale/unknown link: a new session is made on START
+    $("#hint").textContent = "That session has ended or belongs to another server. Tap START to begin a new one; the dashboard will offer to watch it.";
+    return;
+  }
+  const s = await r.json();
+  if (["done", "error"].includes(s.state)) { sessionId = null; $("#hint").textContent = "That session already finished. Tap START for a new one."; }
+  else setNet("ok", "ready");
+}
+
 async function start() {
   $("#go").disabled = true;
   try {
     await ensureSession();
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("This browser blocks the camera here. Open the page over https:// in Chrome or Safari.");
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
     $("#cam").srcObject = stream;
@@ -107,12 +122,14 @@ async function start() {
     try { wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* optional */ }
     running = true;
     timer = setInterval(sendFrame, 1000 / FPS);
-    $("#go").textContent = "STOP";
+    $("#go").textContent = "Stop";
     $("#go").classList.add("stop");
     $("#go").setAttribute("aria-label", "Stop streaming and save");
     $("#hint").textContent = "Streaming. Hazards appear on the dashboard map in real time.";
   } catch (e) {
-    fatal("Can't start", e.message || String(e));
+    const msg = e.name === "NotAllowedError" ? "Camera permission was denied. Allow camera access for this site in the browser settings, then reload."
+      : e.name === "NotFoundError" ? "No camera found on this device." : (e.message || String(e));
+    fatal("Can't start", msg);
     stop(false);
   } finally {
     $("#go").disabled = false;
@@ -127,7 +144,7 @@ function stop(save = true) {
   wakeLock?.release?.();
   if (save && ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "stop" }));
   setTimeout(() => ws?.close(), 500);
-  $("#go").textContent = "START";
+  $("#go").textContent = "Start";
   $("#go").classList.remove("stop");
   $("#go").setAttribute("aria-label", "Start streaming");
   $("#hint").textContent = save ? `Stopped after ${sent} frames — the run is being saved on the dashboard.` : $("#hint").textContent;
@@ -135,6 +152,7 @@ function stop(save = true) {
 }
 
 $("#go").addEventListener("click", () => (running ? stop(true) : start()));
+checkSession();
 document.addEventListener("visibilitychange", async () => {
   if (document.visibilityState === "visible" && running && !wakeLock) {
     try { wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* optional */ }

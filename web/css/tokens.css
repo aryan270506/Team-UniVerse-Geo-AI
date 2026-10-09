@@ -1,0 +1,104 @@
+/* =====================================================================
+   HazardMap design tokens: soft tracking dashboard.
+   Light canvas, white rounded cards, black accents, pastel gradients,
+   pill chips with coloured dots. Every value used in the UI comes from here.
+   ===================================================================== */
+:root {
+  /* surfaces */
+  --canvas: #f1f1f3;
+  --surface: #ffffff;
+  --surface-2: #f7f7f9;
+  --ink: #111111;
+  --ink-2: #6b7280;
+  --ink-3: #9ca3af;
+  --line: #e6e6ea;
+  --rail: #111111;
+
+  /* gradients (hero cards) */
+  --grad-lilac: linear-gradient(120deg, #efeaff 0%, #f6ecff 45%, #fbe8f3 100%);
+  --grad-mint: linear-gradient(120deg, #dcf6ea 0%, #dfeefc 50%, #e7e3ff 100%);
+  --grad-peach: linear-gradient(120deg, #fff1e6 0%, #fde8ef 100%);
+
+  /* status (workflow) */
+  --st-new: #f59e0b;
+  --st-verified: #3b82f6;
+  --st-assigned: #8b5cf6;
+  --st-progress: #f97316;
+  --st-resolved: #10b981;
+
+  /* priority / severity */
+  --p1: #ef4444;
+  --p2: #f59e0b;
+  --p3: #10b981;
+  --route: #111111;
+
+  /* category tiles */
+  --t-pothole: #fde2e2;
+  --t-crack: #e7e5ff;
+  --t-alligator: #ede4ff;
+  --t-flood: #dbeafe;
+  --t-landslide: #f8e7d4;
+  --t-tree: #dcf5e7;
+  --t-power: #fff3c4;
+  --t-debris: #e9ecef;
+  --t-block: #ffe4cf;
+
+  /* type */
+  --font: "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fs-xs: 11px;
+  --fs-sm: 12.5px;
+  --fs-md: 14px;
+  --fs-lg: 17px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+  --fs-3xl: 40px;
+
+  /* space (4px base) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 48px;
+
+  /* shape */
+  --r-card: 24px;
+  --r-inner: 16px;
+  --r-btn: 12px;
+  --r-chip: 8px;
+  --r-pill: 999px;
+  --shadow: 0 1px 2px rgba(17, 17, 17, .04), 0 10px 30px rgba(17, 17, 17, .06);
+  --shadow-pop: 0 2px 6px rgba(17, 17, 17, .06), 0 18px 40px rgba(17, 17, 17, .12);
+
+  /* motion */
+  --ease: 160ms ease;
+
+  --rail-w: 92px;
+  --top-h: 64px;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--canvas); color: var(--ink);
+  font: 400 var(--fs-md)/1.5 var(--font);
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
+p { margin: 0; }
+a { color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
+::selection { background: #111; color: #fff; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.label { font-size: var(--fs-sm); color: var(--ink-2); font-weight: 400; }
+.label.red { color: var(--p1); }
+.muted { color: var(--ink-2); }
+.num { font-variant-numeric: tabular-nums; font-weight: 600; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* legacy texture utilities from earlier themes: intentionally neutral now */
+.swiss-grid-pattern, .swiss-dots, .swiss-diagonal { background-image: none; }
+.muted-bg { background-color: var(--surface-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

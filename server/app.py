@@ -14,11 +14,14 @@ from fastapi.staticfiles import StaticFiles
 
 from hazardmap.config import RUNS_DIR, ROOT
 
+from .cases import router as cases_router
+from .closures import closures
 from .live import router as live_router, start_file_session
 from .workers import make_cfg, new_run_id, num as _num
 
 app = FastAPI(title="HazardMap")
 app.include_router(live_router)
+app.include_router(cases_router)
 RUNS_DIR.mkdir(exist_ok=True)
 
 _ID = re.compile(r"^[\w\-]+$")
@@ -54,6 +57,12 @@ def get_run(run_id: str):
         "hazards": json.loads((d / "hazards.geojson").read_text()),
         "trajectory": json.loads((d / "trajectory.geojson").read_text()),
     }
+
+
+@app.get("/api/runs/{run_id}/closures")
+def run_closures(run_id: str):
+    """Road closures + detours for blocking hazards (routing via public OSRM, cached per run)."""
+    return closures(_run_dir(run_id))
 
 
 @app.get("/api/runs/{run_id}/download/{name}")

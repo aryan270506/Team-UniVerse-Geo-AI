@@ -66,7 +66,7 @@ def run(video: str, gps: str, out_dir: str | Path, cfg: PipelineConfig | None = 
         "inference_fps": round(det.fps, 1),
         "wall_time_s": round(time.perf_counter() - t_start, 1),
         "calibration": calibration,
-    })
+    }, media={"pose_fn": traj.pose, "t0": t0, "duration": info["duration"], "video": video})
     report("done", 1.0)
     return summary
 

@@ -3,32 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b0d10">
+  <meta name="theme-color" content="#111111">
   <title>HazardMap Dashcam</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    :root { --bg:#0b0d10; --text:#e8eaed; --muted:#a1a7b3; --high:#e5484d; --ok:#46a758; --warn:#f5a524; --accent:#4f8cff; color-scheme: dark; }
+    :root { --p1: #ef4444; --ok: #10b981; --warn: #f59e0b; color-scheme: dark; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.4 Inter, system-ui, -apple-system, sans-serif; overflow: hidden; }
-    video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
-    .top { position: fixed; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
-      display: flex; gap: 8px; flex-wrap: wrap; background: linear-gradient(rgba(0,0,0,.7), transparent); }
-    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: rgba(0,0,0,.55);
-      font-size: 13px; font-variant-numeric: tabular-nums; backdrop-filter: blur(6px); }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-    .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--high); }
-    .bottom { position: fixed; left: 0; right: 0; bottom: 0; padding: 16px 16px calc(env(safe-area-inset-bottom) + 20px);
-      display: flex; flex-direction: column; align-items: center; gap: 12px; background: linear-gradient(transparent, rgba(0,0,0,.75)); }
-    .hint { margin: 0; color: var(--muted); font-size: 13px; text-align: center; max-width: 32ch; }
-    .big { width: 84px; height: 84px; border-radius: 50%; border: 4px solid #fff; background: var(--high); color: #fff;
-      font: 700 15px/1 inherit; cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,.5); }
-    .big.stop { border-radius: 24px; background: #fff; color: var(--high); }
-    .big:disabled { opacity: .5; }
-    .big:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-    .hazards { font-size: 28px; font-weight: 700; }
-    .err { position: fixed; inset: 0; display: grid; place-content: center; padding: 24px; text-align: center; background: rgba(11,13,16,.95); }
+    html, body { margin: 0; height: 100%; background: #111; color: #fff; font: 14px/1.4 Poppins, system-ui, sans-serif; overflow: hidden; }
+    video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #111; }
+    .top { position: fixed; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top) + 12px) 12px 12px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .pill { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 7px 10px; background: rgba(255,255,255,.95); color: #111; border-radius: 10px;
+      font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #9ca3af; }
+    .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--p1); }
+    .brand { position: fixed; left: 12px; top: calc(env(safe-area-inset-top) + 58px); display: flex; align-items: center; gap: 8px; font-weight: 600; background: #111; padding: 6px 10px; border-radius: 10px; }
+    .brand i { width: 8px; height: 8px; background: var(--p1); border-radius: 50%; display: inline-block; }
+    .bottom { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 10px); padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center;
+      background: #fff; color: #111; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .hazards b { display: block; font-size: 40px; font-weight: 600; line-height: 1; }
+    .hazards span { font-size: 12px; color: #6b7280; }
+    .hint { grid-column: 1 / -1; margin: 0; font-size: 12px; color: #6b7280; }
+    .big { width: 112px; height: 64px; border: 0; border-radius: 16px; background: #111; color: #fff; cursor: pointer; font: 600 16px/1 Poppins, sans-serif; }
+    .big.stop { background: var(--p1); }
+    .big:disabled { opacity: .45; }
+    .big:focus-visible { outline: 3px solid #111; outline-offset: 3px; }
+    .err { position: fixed; inset: 0; display: grid; align-content: center; padding: 24px; background: #f1f1f3; color: #111; }
     .err[hidden] { display: none; }
-    .err h1 { font-size: 20px; margin: 0 0 8px; }
-    .err p { color: var(--muted); margin: 0; }
+    .err > div { background: #fff; border-radius: 24px; padding: 24px; box-shadow: 0 10px 30px rgba(17,17,17,.08); }
+    .err h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
+    .err p { margin: 0; font-size: 14px; color: #6b7280; }
   </style>
 </head>
 <body>
@@ -39,9 +42,10 @@
     <span class="pill"><span id="rate">0 fps</span></span>
     <span class="pill"><span id="lat">– s</span></span>
   </div>
+  <div class="brand" aria-hidden="true"><i></i>HazardMap</div>
   <div class="bottom">
-    <div class="hazards" aria-live="polite"><span id="hz">0</span> hazards</div>
-    <button class="big" id="go" aria-label="Start streaming">START</button>
+    <div class="hazards" aria-live="polite"><b id="hz">0</b><span>Hazards mapped</span></div>
+    <button class="big" id="go" aria-label="Start streaming">Start</button>
     <p class="hint" id="hint">Mount the phone at the windscreen, landscape, horizon about mid-frame. Tap start.</p>
   </div>
   <div class="err" id="err" hidden><div><h1 id="errTitle"></h1><p id="errMsg"></p></div></div>

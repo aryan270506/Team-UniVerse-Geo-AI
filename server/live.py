@@ -9,6 +9,7 @@
 """
 import asyncio
 import json
+import os
 import shutil
 import socket
 import struct
@@ -119,7 +120,7 @@ def _file_worker(lv: Live, video: str, gps: str, cfg, speed: float | None):
     if cfg.auto_calibrate:
         lv.emit({"type": "status", "state": "calibrating"})
         meta["calibration"] = calibrate(video, cfg, detector.world)
-    lv.session = LiveSession(cfg, lv.id, lv.mode, detector, traj.pose, traj.geojson, lv.emit, meta)
+    lv.session = LiveSession(cfg, lv.id, lv.mode, detector, traj.pose, traj.geojson, lv.emit, meta, source_video=video)
     lv.state = "running"
     lv.emit({"type": "route", "feature": lv.route})
     lv.emit({"type": "status", "state": "running"})
@@ -215,9 +216,11 @@ async def start_device(request: Request, name: str = Form("phone drive"), sample
     lv = lives[sid] = Live(sid, "device", name, asyncio.get_running_loop())
     lv.traj = LiveTrajectory(cfg.max_gps_gap_s)
     executor.submit(_device_worker, lv, cfg)
-    port = request.url.port or (443 if request.url.scheme == "https" else 80)
-    urls = [f"{request.url.scheme}://{ip}:{port}/live.html?s={sid}&fps={sample_fps:g}" for ip in _lan_ips()]
-    return {**lv.info(), "phone_urls": urls, "secure": request.url.scheme == "https"}
+    # Phones only allow camera + GPS on HTTPS, so the link always targets the HTTPS server.
+    secure = request.url.scheme == "https"
+    port = request.url.port if secure and request.url.port else int(os.environ.get("HAZARDMAP_HTTPS_PORT", "8443"))
+    urls = [f"https://{ip}:{port}/live.html?s={sid}&fps={sample_fps:g}" for ip in _lan_ips()]
+    return {**lv.info(), "phone_urls": urls, "secure": secure}
 
 
 @router.post("/api/live/{sid}/stop")

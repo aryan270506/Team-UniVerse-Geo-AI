@@ -49,8 +49,9 @@ def best_snapshot(h: Hazard, snapshots: dict):
 
 
 def export_run(out: Path, hazards: list[Hazard], obs: list[Observation], snapshots: dict,
-               trajectory: dict, cfg: PipelineConfig, meta: dict) -> dict:
-    """`trajectory` is a GeoJSON LineString Feature; `meta` holds run-level facts for summary.json."""
+               trajectory: dict, cfg: PipelineConfig, meta: dict, media: dict | None = None) -> dict:
+    """`trajectory` is a GeoJSON LineString Feature; `meta` holds run-level facts for summary.json.
+    `media` (optional): {pose_fn, t0, duration, video?} -> timeline.json and the annotated AI-view video."""
     out = Path(out)
     (out / "snapshots").mkdir(parents=True, exist_ok=True)
     for old in (out / "snapshots").glob("H*.jpg"):     # stale images from a previous run
@@ -95,8 +96,26 @@ def export_run(out: Path, hazards: list[Hazard], obs: list[Observation], snapsho
         "bbox": [float(np.nanmin(lons)), float(np.nanmin(lats)), float(np.nanmax(lons)), float(np.nanmax(lats))],
         "config": cfg_dict(cfg),
     }
+    if media:
+        summary["media"] = write_media(out, hazards, features, cfg, media)
     (out / "summary.json").write_text(json.dumps(summary, indent=1))
     return summary
+
+
+def write_media(out: Path, hazards: list[Hazard], features: list[dict], cfg: PipelineConfig, media: dict) -> dict:
+    from .render import render_annotated, timeline
+    res = {"timeline": None, "annotated": None}
+    tl = timeline(media["pose_fn"], media["t0"], media["duration"])
+    if tl:
+        (out / "timeline.json").write_text(json.dumps({"columns": ["t", "lat", "lon", "heading", "speed"], "rows": tl}))
+        res["timeline"] = "timeline.json"
+    if media.get("video"):
+        shown = [(o.det, h.severity()[1]) for h in hazards for o in h.obs]
+        first = [(f["properties"]["video_time_s"], f["properties"]["severity"]) for f in features]
+        if render_annotated(media["video"], str(out / "annotated.mp4"), shown, first, media["pose_fn"],
+                            media["t0"], cfg.sample_fps):
+            res["annotated"] = "annotated.mp4"
+    return res
 
 
 def cfg_dict(cfg: PipelineConfig) -> dict:

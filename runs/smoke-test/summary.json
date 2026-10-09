@@ -11,8 +11,8 @@
  ],
  "frames_processed": 126,
  "raw_detections": 36,
- "inference_fps": 13.9,
- "wall_time_s": 16.1,
+ "inference_fps": 16.9,
+ "wall_time_s": 14.3,
  "calibration": {
   "camera": "phone",
   "hfov_deg": 70.0,
@@ -77,5 +77,9 @@
   },
   "rdd_weights": "/Applications/XAMPP/xamppfiles/htdocs/hackathon/models/rdd_yolov8s.pt",
   "world_weights": "/Applications/XAMPP/xamppfiles/htdocs/hackathon/models/yolov8s-worldv2.pt"
+ },
+ "media": {
+  "timeline": "timeline.json",
+  "annotated": "annotated.mp4"
  }
 }
