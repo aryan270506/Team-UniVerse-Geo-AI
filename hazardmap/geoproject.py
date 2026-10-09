@@ -43,4 +43,4 @@ def project(u: float, v: float, width: int, height: int, pose: Pose,
     dist = max(dist, cam.min_dist_m)
     bearing = (pose.heading + math.degrees(math.atan2(lat_off, fwd))) % 360
     lon, lat, _ = GEOD.fwd(pose.lon, pose.lat, bearing, dist)
-    return {"lat": lat, "lon": lon, "range_m": dist, "bearing": bearing}
+    return {"lat": lat, "lon": lon, "range_m": dist, "bearing": bearing, "lateral_m": lat_off}

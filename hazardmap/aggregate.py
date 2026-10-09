@@ -5,10 +5,10 @@ from dataclasses import dataclass, field
 import numpy as np
 from sklearn.cluster import DBSCAN
 
-from .config import CATEGORIES, PipelineConfig
-from .detect import Detection, DetectionResult
+from .config import CATEGORIES, ROAD_SURFACE, SCENE_CATEGORIES, PipelineConfig
+from .detect import Detection, DetectionResult, snapshot_key
 from .geoproject import project
-from .ingest import GEOD, Trajectory
+from .ingest import GEOD, Pose, Trajectory
 
 EARTH_R = 6_371_000.0
 
@@ -83,18 +83,31 @@ class Hazard:
         return {"type": "Point", "coordinates": [round(lon, 7), round(lat, 7)]}
 
 
+def observe(d: Detection, pose: Pose, width: int, height: int, epoch: float,
+            cfg: PipelineConfig) -> Observation | None:
+    """Geolocate one detection given the vehicle pose at its capture time."""
+    x1, y1, x2, y2 = d.box
+    hood_y = height * (1 - cfg.camera.hood_frac)
+    if (y1 + y2) / 2 > hood_y:
+        return None                            # reflection/dirt on our own bonnet
+    if cfg.camera.hood_frac and d.category in ROAD_SURFACE and y2 > hood_y + 0.05 * height:
+        return None                            # box runs into our own vehicle: not a clean road view
+    p = project((x1 + x2) / 2, y2, width, height, pose, cfg.camera)
+    if not p:
+        return None
+    if d.category in ROAD_SURFACE and abs(p["lateral_m"]) > cfg.road_half_width_m:
+        return None                            # off the carriageway: verge, hillside, wall
+    return Observation(d, p["lat"], p["lon"], p["range_m"], epoch, pose.gap_s)
+
+
 def geolocate(result: DetectionResult, traj: Trajectory, video_t0: float,
               cfg: PipelineConfig) -> list[Observation]:
     obs = []
     for d in result.detections:
         epoch = video_t0 + d.video_t
-        pose = traj.pose(epoch)
-        x1, y1, x2, y2 = d.box
-        if (y1 + y2) / 2 > result.height * (1 - cfg.camera.hood_frac):
-            continue                           # reflection/dirt on our own bonnet
-        p = project((x1 + x2) / 2, y2, result.width, result.height, pose, cfg.camera)
-        if p:
-            obs.append(Observation(d, p["lat"], p["lon"], p["range_m"], epoch, pose.gap_s))
+        o = observe(d, traj.pose(epoch), result.width, result.height, epoch, cfg)
+        if o:
+            obs.append(o)
     return obs
 
 
@@ -102,8 +115,7 @@ def cluster(obs: list[Observation], cfg: PipelineConfig) -> list[Hazard]:
     # 1) group by tracker identity: one physical object across frames
     tracks: dict = defaultdict(list)
     for o in obs:
-        key = (o.det.source, o.det.track_id if o.det.track_id is not None else f"f{o.det.frame_idx}")
-        tracks[(o.det.category, key)].append(o)
+        tracks[(o.det.category, snapshot_key(o.det))].append(o)
 
     # 2) merge tracks of the same category whose estimated positions are close
     #    (tracker ID switches, both models seeing the same thing, re-detections)
@@ -114,7 +126,8 @@ def cluster(obs: list[Observation], cfg: PipelineConfig) -> list[Hazard]:
     hazards = []
     for cat, group in by_cat.items():
         coords = np.radians([h.position for _, h in group])
-        labels = DBSCAN(eps=cfg.cluster_eps_m / EARTH_R, min_samples=1,
+        eps = cfg.scene_cluster_eps_m if cat in SCENE_CATEGORIES else cfg.cluster_eps_m
+        labels = DBSCAN(eps=eps / EARTH_R, min_samples=1,
                         metric="haversine").fit_predict(coords)
         merged: dict = defaultdict(lambda: Hazard(cat, []))
         for (key, h), lbl in zip(group, labels):
@@ -123,4 +136,13 @@ def cluster(obs: list[Observation], cfg: PipelineConfig) -> list[Hazard]:
         hazards.extend(merged.values())
 
     # 3) drop flickers: need several frames unless the detector is very sure
-    return [h for h in hazards if h.frames >= cfg.min_frames or h.confidence >= 0.6]
+    return [h for h in hazards if confirmed(h, cfg)]
+
+
+def confirmed(h: Hazard, cfg: PipelineConfig) -> bool:
+    """Enough evidence to report. Road-surface damage must persist longer than other hazards;
+    whole-scene hazards (from the CLIP scene check) must persist, however confident one frame is."""
+    if all(o.det.source == "scene" for o in h.obs):
+        return h.frames >= cfg.scene_min_hits
+    need = cfg.road_min_frames if h.category in ROAD_SURFACE else cfg.min_frames
+    return h.frames >= need or h.confidence >= 0.6

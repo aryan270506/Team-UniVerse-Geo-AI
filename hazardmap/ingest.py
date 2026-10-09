@@ -130,6 +130,57 @@ class Trajectory:
         }
 
 
+class LiveTrajectory:
+    """Trajectory built from GPS fixes arriving one at a time (phone stream).
+    Inside the buffer it interpolates like Trajectory; past the newest fix it
+    dead-reckons with the last heading and speed for up to max_gap_s."""
+
+    def __init__(self, max_gap_s: float = 15.0, max_accuracy_m: float = 50.0):
+        self.max_gap_s = max_gap_s
+        self.max_accuracy_m = max_accuracy_m
+        self.fixes: list[tuple[float, float, float]] = []
+        self._traj: Trajectory | None = None
+
+    def add_fix(self, t: float, lat: float, lon: float, accuracy: float | None = None) -> bool:
+        if accuracy is not None and accuracy > self.max_accuracy_m:
+            return False                         # too coarse to place hazards with
+        if self.fixes and t <= self.fixes[-1][0]:
+            return False
+        self.fixes.append((t, lat, lon))
+        if len(self.fixes) >= 2:
+            df = pd.DataFrame(self.fixes, columns=["t", "lat", "lon"])
+            self._traj = Trajectory(_add_motion(df), self.max_gap_s)
+        return True
+
+    @property
+    def ready(self) -> bool:
+        return self._traj is not None
+
+    def pose(self, t: float) -> Pose:
+        if self._traj is None:
+            if self.fixes and abs(t - self.fixes[-1][0]) <= self.max_gap_s:
+                _, lat, lon = self.fixes[-1]
+                return Pose(lat, lon, np.nan, 0.0, abs(t - self.fixes[-1][0]), False)  # no heading yet
+            return Pose(np.nan, np.nan, np.nan, 0.0, np.inf, False)
+        tr = self._traj
+        if t <= tr.t1:
+            return tr.pose(t)
+        dt = t - tr.t1
+        if dt > self.max_gap_s:
+            return Pose(np.nan, np.nan, np.nan, 0.0, dt, False)
+        last = tr.df.iloc[-1]
+        lon, lat, _ = GEOD.fwd(last.lon, last.lat, last.heading, last.speed * dt)
+        return Pose(float(lat), float(lon), float(last.heading), float(last.speed), dt, True)
+
+    def geojson(self) -> dict:
+        coords = [[round(lo, 7), round(la, 7)] for _, la, lo in self.fixes]
+        t0 = self.fixes[0][0] if self.fixes else 0.0
+        t1 = self.fixes[-1][0] if self.fixes else 0.0
+        return {"type": "Feature",
+                "properties": {"kind": "trajectory", "start": iso(t0), "end": iso(t1), "points": len(coords)},
+                "geometry": {"type": "LineString", "coordinates": coords}}
+
+
 def iso(epoch: float) -> str:
     return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat(timespec="milliseconds")
 

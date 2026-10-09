@@ -1,47 +1,48 @@
 {
  "mode": "batch",
- "video": "road_bad_25s.mp4",
- "gps": "road_bad.gpx",
- "video_start": "2026-10-09T05:00:00.000+00:00",
+ "video": "rohtang_nh3_60s.mp4",
+ "gps": "rohtang_nh3_60s.gpx",
+ "video_start": "2017-06-20T05:00:00.000+00:00",
  "sync_method": "aligned to first GPS fix",
- "duration_s": 25.1,
+ "duration_s": 60.0,
  "resolution": [
-  1280,
-  720
+  640,
+  360
  ],
- "frames_processed": 126,
- "raw_detections": 36,
- "inference_fps": 13.9,
- "wall_time_s": 16.1,
+ "frames_processed": 300,
+ "raw_detections": 229,
+ "inference_fps": 16.5,
+ "wall_time_s": 26.6,
  "calibration": {
-  "camera": "phone",
-  "hfov_deg": 70.0,
-  "hood_frac": 0.0,
-  "preset_pitch_deg": 6.0,
+  "camera": "action",
+  "hfov_deg": 120.0,
+  "hood_frac": 0.3,
+  "preset_pitch_deg": 22.0,
   "horizon": null,
   "horizon_confidence": 0.0,
   "source": "preset",
-  "pitch_deg": 6.0
+  "pitch_deg": 22.0
  },
- "geolocated_detections": 36,
- "hazards": 3,
+ "geolocated_detections": 224,
+ "hazards": 2,
  "by_category": {
-  "pothole": 3
+  "flooding": 1,
+  "landslide": 1
  },
  "by_severity": {
-  "medium": 3
+  "high": 2
  },
  "device": "mps",
- "route_km": 1.35,
+ "route_km": 0.22,
  "bbox": [
-  73.8076915,
-  18.5073798,
-  73.8155471,
-  18.5099947
+  77.2431755,
+  32.3673093,
+  77.2443931,
+  32.3676292
  ],
  "config": {
   "sample_fps": 5.0,
-  "camera_preset": "phone",
+  "camera_preset": "action",
   "auto_calibrate": true,
   "rdd_conf": 0.2,
   "world_conf": 0.08,
@@ -68,10 +69,10 @@
   "max_gps_gap_s": 15.0,
   "time_offset_s": 0.0,
   "camera": {
-   "height_m": 1.3,
-   "pitch_deg": 6.0,
-   "hfov_deg": 70.0,
-   "hood_frac": 0.0,
+   "height_m": 1.5,
+   "pitch_deg": 22.0,
+   "hfov_deg": 120.0,
+   "hood_frac": 0.3,
    "min_dist_m": 2.0,
    "max_dist_m": 40.0
   },

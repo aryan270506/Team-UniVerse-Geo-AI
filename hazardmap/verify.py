@@ -12,11 +12,14 @@ import torch
 from PIL import Image
 
 POSITIVE = {
-    "flooding": ["a photo of a flooded road covered in water", "a photo of a large puddle of water on a street"],
+    "flooding": ["a photo of a flooded road covered in water", "a photo of a large puddle of water on a street",
+                 "a photo of muddy water flowing across a road", "a photo of a stream crossing a mountain road",
+                 "a photo of a waterlogged street during monsoon"],
     "fallen_tree": ["a photo of a fallen tree lying across a road", "a photo of broken tree branches lying on a road"],
     "power_line": ["a photo of a fallen power line lying on the ground", "a photo of a broken electric pole"],
     "debris": ["a photo of debris and rubble scattered on a road", "a photo of storm wreckage and broken material"],
-    "landslide": ["a photo of a landslide with mud and rocks on a road"],
+    "landslide": ["a photo of a landslide with mud and rocks on a road",
+                  "a photo of rubble and boulders blocking a mountain road"],
     "blockage": ["a photo of a traffic cone", "a photo of a road barricade"],
 }
 NEGATIVE = [
@@ -24,6 +27,7 @@ NEGATIVE = [
     "a photo of the sky", "a photo of a building", "a photo of a car hood through a windshield",
     "a photo of a road sign", "a photo of trees beside a road", "a photo of a standing utility pole with wires",
     "a photo of grass", "a photo of a sidewalk",
+    "a photo of a dry dirt road", "a photo of dry red soil and sand",
 ]
 
 
@@ -62,10 +66,12 @@ class ClipVerifier:
             out.append(agg)
         return out
 
-    def accept(self, frame: np.ndarray, boxes: list, cats: list[str]) -> list[float]:
+    def accept(self, frame: np.ndarray, boxes: list, cats: list[str],
+               thresholds: list[float] | None = None) -> list[float]:
         """Verified score for each (box, category); 0.0 means rejected."""
+        thresholds = thresholds or [self.threshold] * len(boxes)
         res = []
-        for s, cat in zip(self.scores(frame, boxes), cats):
+        for s, cat, th in zip(self.scores(frame, boxes), cats, thresholds):
             v = s.get(cat, 0.0)
-            res.append(v if v >= self.threshold else 0.0)
+            res.append(v if v >= th else 0.0)
         return res

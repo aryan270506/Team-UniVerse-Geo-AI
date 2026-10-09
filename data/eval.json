@@ -1,0 +1,14 @@
+{
+  "_doc": "Ground truth for tools/eval.py. Each clip runs zero-config (camera type only). 'present' categories must be found, 'absent' ones must not.",
+  "clips": [
+    {"name": "india-nh3-flood", "video": "data/india/rohtang_nh3_60s.mp4", "gps": "data/india/rohtang_nh3_60s.gpx",
+     "camera": "action", "present": ["flooding"], "absent": ["pothole", "crack", "alligator_crack", "fallen_tree", "power_line"],
+     "note": "helmet cam, stream flowing across NH3 near Rohtang; no visible potholes (road is under water/rubble)"},
+    {"name": "branson-dry-boulevard", "video": "data/sample/branson.mp4", "gps": "data/sample/branson.gpx",
+     "camera": "dashcam", "present": [], "absent": ["flooding", "landslide", "pothole", "fallen_tree", "power_line"],
+     "note": "dry sunny 4-lane road after a tornado; only tar seams / cracks are acceptable"},
+    {"name": "ghana-potholed-road", "video": "data/sample/road_bad_25s.mp4", "gps": "data/sample/road_bad.gpx",
+     "camera": "phone", "present": ["pothole"], "absent": ["flooding", "landslide", "fallen_tree", "power_line"],
+     "note": "static roadside camera, heavily potholed laterite road, dry"}
+  ]
+}

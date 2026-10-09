@@ -7,7 +7,8 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from .config import MIN_CONF, RDD_MAP, WORLD_DISTRACTORS, WORLD_PROMPTS, PipelineConfig
+from .config import MIN_CONF, RDD_MAP, SCENE_CATEGORIES, WORLD_DISTRACTORS, WORLD_PROMPTS, PipelineConfig
+from .scene import SceneGate, horizon_row
 
 
 @dataclass
@@ -77,57 +78,117 @@ class HazardDetector:
         return model.track(frame, persist=True, conf=conf, imgsz=imgsz,
                            device=self.cfg.device, tracker="bytetrack.yaml", verbose=False)[0]
 
-    def process(self, video_path: str,
-                progress: Callable[[float], None] | None = None,
-                duration: float | None = None) -> DetectionResult:
+    def reset(self):
+        """Forget tracker state and snapshots before a new video/stream."""
+        for m in (self.rdd, self.world):
+            if m is not None and getattr(m, "predictor", None) is not None:
+                for tr in getattr(m.predictor, "trackers", []):
+                    tr.reset()
+        self.snapshots = {}
+        self.scene = SceneGate(self.cfg) if (self.verifier and self.cfg.scene_check) else None
+
+    def detect_frame(self, frame: np.ndarray, idx: int, vt: float) -> tuple[list[Detection], float]:
+        """Run every model on one frame. Returns detections and seconds spent in inference.
+        Keeps the best annotated snapshot per tracked object in self.snapshots."""
+        if not hasattr(self, "snapshots"):
+            self.reset()
+        h, w = frame.shape[:2]
         dets: list[Detection] = []
-        snapshots: dict = {}
-        n, infer, w, h = 0, 0.0, 0, 0
+        infer = 0.0
+
+        # 1) whole-road scene check (flooding / landslide): no box proposal needed
+        scene_active: dict = {}
+        if self.scene is not None:
+            t0 = time.perf_counter()
+            scene_active, road_box = self.scene.check(frame, self.verifier)
+            infer += time.perf_counter() - t0
+            x1, y1, x2, y2 = road_box
+            for cat, score in scene_active.items():
+                d = Detection(idx, vt, "scene", None, f"scene:{cat}", cat, round(score, 3), road_box,
+                              (x2 - x1) * (y2 - y1) / (w * h), round(score, 3), round(score, 3))
+                dets.append(d)
+                self.snapshots[snapshot_key(d)] = (d.conf, _snapshot(frame, d))
+        # road surface can't be judged under water or rubble
+        road_hidden = bool(scene_active)
+        v_horizon = horizon_row(h, w, self.cfg)
         models = [("rdd", self.rdd, self.cfg.rdd_conf, self.cfg.rdd_imgsz)]
         if self.world is not None:
             models.append(("world", self.world, self.cfg.world_conf, self.cfg.world_imgsz))
 
+        for source, model, conf, imgsz in models:
+            t0 = time.perf_counter()
+            res = self._run(model, frame, conf, imgsz)
+            infer += time.perf_counter() - t0
+            if res.boxes is None or len(res.boxes) == 0:
+                continue
+            ids = res.boxes.id.int().tolist() if res.boxes.id is not None else [None] * len(res.boxes)
+            cands = []
+            for box, c, cls, tid in zip(res.boxes.xyxy.tolist(), res.boxes.conf.tolist(),
+                                        res.boxes.cls.int().tolist(), ids):
+                label = res.names[cls]
+                cat = RDD_MAP.get(label) if source == "rdd" else WORLD_PROMPTS.get(label)
+                if not cat or c < MIN_CONF.get(cat, 0.0):
+                    continue
+                x1, y1, x2, y2 = box
+                area = (x2 - x1) * (y2 - y1) / (w * h)
+                if source == "rdd" and (road_hidden or y2 < v_horizon + 0.02 * h):
+                    continue        # submerged road, or a "pothole" on a hillside/wall above the horizon
+                if source == "world" and area > self.cfg.world_max_area and (
+                        cat not in SCENE_CATEGORIES or not self.verifier):
+                    continue
+                cands.append(Detection(idx, vt, source, tid, label, cat, float(c),
+                                       (x1, y1, x2, y2), area, float(c)))
+            if source == "world" and self.verifier and cands:
+                t0 = time.perf_counter()
+                ths = [self.cfg.scene_verify_threshold if d.area_frac > self.cfg.world_max_area
+                       else self.cfg.verify_threshold for d in cands]
+                checks = self.verifier.accept(frame, [d.box for d in cands], [d.category for d in cands], ths)
+                infer += time.perf_counter() - t0
+                kept = []
+                for d, v in zip(cands, checks):
+                    if v > 0:
+                        d.verify, d.conf = round(v, 3), (d.det_conf + v) / 2
+                        kept.append(d)
+                cands = kept
+            for d in cands:
+                dets.append(d)
+                key = snapshot_key(d)
+                if key not in self.snapshots or d.conf > self.snapshots[key][0]:
+                    self.snapshots[key] = (d.conf, _snapshot(frame, d))
+        return dets, infer
+
+    def process(self, video_path: str,
+                progress: Callable[[float], None] | None = None,
+                duration: float | None = None) -> DetectionResult:
+        self.reset()
+        dets: list[Detection] = []
+        n, infer, w, h = 0, 0.0, 0, 0
         for idx, vt, frame in iter_frames(video_path, self.cfg.sample_fps):
             h, w = frame.shape[:2]
             n += 1
-            for source, model, conf, imgsz in models:
-                t0 = time.perf_counter()
-                res = self._run(model, frame, conf, imgsz)
-                infer += time.perf_counter() - t0
-                if res.boxes is None or len(res.boxes) == 0:
-                    continue
-                ids = res.boxes.id.int().tolist() if res.boxes.id is not None else [None] * len(res.boxes)
-                cands = []
-                for box, c, cls, tid in zip(res.boxes.xyxy.tolist(), res.boxes.conf.tolist(),
-                                            res.boxes.cls.int().tolist(), ids):
-                    label = res.names[cls]
-                    cat = RDD_MAP.get(label) if source == "rdd" else WORLD_PROMPTS.get(label)
-                    if not cat or c < MIN_CONF.get(cat, 0.0):
-                        continue
-                    x1, y1, x2, y2 = box
-                    area = (x2 - x1) * (y2 - y1) / (w * h)
-                    if source == "world" and area > self.cfg.world_max_area:
-                        continue
-                    cands.append(Detection(idx, vt, source, tid, label, cat, float(c),
-                                           (x1, y1, x2, y2), area, float(c)))
-                if source == "world" and self.verifier and cands:
-                    t0 = time.perf_counter()
-                    checks = self.verifier.accept(frame, [d.box for d in cands], [d.category for d in cands])
-                    infer += time.perf_counter() - t0
-                    kept = []
-                    for d, v in zip(cands, checks):
-                        if v > 0:
-                            d.verify, d.conf = round(v, 3), (d.det_conf + v) / 2
-                            kept.append(d)
-                    cands = kept
-                for d in cands:
-                    dets.append(d)
-                    key = (source, d.track_id if d.track_id is not None else f"f{idx}")
-                    if key not in snapshots or d.conf > snapshots[key][0]:
-                        snapshots[key] = (d.conf, _snapshot(frame, d))
+            found, secs = self.detect_frame(frame, idx, vt)
+            dets.extend(found)
+            infer += secs
             if progress and duration:
                 progress(min(vt / duration, 1.0))
-        return DetectionResult(dets, w, h, n, infer, snapshots)
+        return DetectionResult(dets, w, h, n, infer, self.snapshots)
+
+
+def snapshot_key(d: Detection):
+    """Identity of a physical object: tracker id, or the frame when untracked."""
+    return (d.source, d.track_id if d.track_id is not None else f"f{d.frame_idx}")
+
+
+def annotate(frame: np.ndarray, dets: list[Detection], max_w: int = 640) -> bytes:
+    """Small JPEG of the frame with every detection drawn, for the live video panel."""
+    scale = min(1.0, max_w / frame.shape[1])
+    img = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale < 1 else frame.copy()
+    for d in dets:
+        x1, y1, x2, y2 = (int(v * scale) for v in d.box)
+        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        cv2.putText(img, f"{d.category} {d.conf:.2f}", (x1, max(y1 - 6, 14)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+    return cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 70])[1].tobytes()
 
 
 def _snapshot(frame: np.ndarray, d: Detection, max_w: int = 640) -> bytes:

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d10">
+  <title>HazardMap Dashcam</title>
+  <style>
+    :root { --bg:#0b0d10; --text:#e8eaed; --muted:#a1a7b3; --high:#e5484d; --ok:#46a758; --warn:#f5a524; --accent:#4f8cff; color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.4 Inter, system-ui, -apple-system, sans-serif; overflow: hidden; }
+    video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+    .top { position: fixed; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+      display: flex; gap: 8px; flex-wrap: wrap; background: linear-gradient(rgba(0,0,0,.7), transparent); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: rgba(0,0,0,.55);
+      font-size: 13px; font-variant-numeric: tabular-nums; backdrop-filter: blur(6px); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--high); }
+    .bottom { position: fixed; left: 0; right: 0; bottom: 0; padding: 16px 16px calc(env(safe-area-inset-bottom) + 20px);
+      display: flex; flex-direction: column; align-items: center; gap: 12px; background: linear-gradient(transparent, rgba(0,0,0,.75)); }
+    .hint { margin: 0; color: var(--muted); font-size: 13px; text-align: center; max-width: 32ch; }
+    .big { width: 84px; height: 84px; border-radius: 50%; border: 4px solid #fff; background: var(--high); color: #fff;
+      font: 700 15px/1 inherit; cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,.5); }
+    .big.stop { border-radius: 24px; background: #fff; color: var(--high); }
+    .big:disabled { opacity: .5; }
+    .big:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .hazards { font-size: 28px; font-weight: 700; }
+    .err { position: fixed; inset: 0; display: grid; place-content: center; padding: 24px; text-align: center; background: rgba(11,13,16,.95); }
+    .err[hidden] { display: none; }
+    .err h1 { font-size: 20px; margin: 0 0 8px; }
+    .err p { color: var(--muted); margin: 0; }
+  </style>
+</head>
+<body>
+  <video id="cam" playsinline muted autoplay></video>
+  <div class="top">
+    <span class="pill"><i class="dot" id="netDot"></i><span id="net">offline</span></span>
+    <span class="pill"><i class="dot" id="gpsDot"></i><span id="gps">GPS –</span></span>
+    <span class="pill"><span id="rate">0 fps</span></span>
+    <span class="pill"><span id="lat">– s</span></span>
+  </div>
+  <div class="bottom">
+    <div class="hazards" aria-live="polite"><span id="hz">0</span> hazards</div>
+    <button class="big" id="go" aria-label="Start streaming">START</button>
+    <p class="hint" id="hint">Mount the phone at the windscreen, landscape, horizon about mid-frame. Tap start.</p>
+  </div>
+  <div class="err" id="err" hidden><div><h1 id="errTitle"></h1><p id="errMsg"></p></div></div>
+  <script src="live.js"></script>
+</body>
+</html>

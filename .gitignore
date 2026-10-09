@@ -15,3 +15,10 @@ data/**/*.gif
 data/**/*.jpg
 runs/*/input/
 weights/
+certs/
+
+# personal uploads / live sessions (timestamped) and regenerable eval outputs
+runs/2026*/
+runs/eval-*/
+# the Indian demo clip is small and CC BY licensed: keep it so the demo runs after cloning
+!data/india/rohtang_nh3_60s.mp4

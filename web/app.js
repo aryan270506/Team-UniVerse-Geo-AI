@@ -143,11 +143,12 @@ function renderSidebar() {
   const s = state.run.summary;
   const feats = state.run.hazards.features;
   const high = feats.filter((f) => f.properties.severity === "high").length;
+  const live = state.live?.stats;
   $("#kpis").innerHTML = [
     ["Hazards mapped", feats.length, ""],
     ["High severity", high, high ? "alert" : ""],
-    ["Route covered", `${s.route_km} km`, ""],
-    ["Inference speed", `${s.inference_fps} fps`, ""],
+    ["Route covered", `${live ? live.route_km : s.route_km} km`, ""],
+    [live ? "Live speed" : "Inference speed", `${live ? live.fps : s.inference_fps} fps`, ""],
   ].map(([k, v, c]) => `<div class="kpi ${c}"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
 
   const sevCount = (k) => feats.filter((f) => f.properties.severity === k).length;
@@ -155,13 +156,22 @@ function renderSidebar() {
     <label class="chip"><input type="checkbox" value="${k}" ${state.sev.has(k) ? "checked" : ""}>
       <i class="dot" style="background:${c}"></i>${k} ${sevCount(k)}</label>`).join("");
 
-  const counts = s.by_category || {};
+  const counts = {};
+  for (const f of feats) counts[f.properties.category] = (counts[f.properties.category] || 0) + 1;
   $("#catFilters").innerHTML = Object.entries(CAT).map(([k, c]) => `
     <label class="cat"><input type="checkbox" value="${k}" ${state.cats.has(k) ? "checked" : ""} ${counts[k] ? "" : "disabled"}>
       ${c.label}<span class="n">${counts[k] || 0}</span></label>`).join("");
 
+  if (state.live) {
+    $("#runMeta").innerHTML = live ? `
+      <b>${{ device: "Live phone stream", replay: "Live replay", batch: "Processing drive" }[state.live.mode]}</b> · ${esc(state.runId)}<br>
+      ${live.frames} frames analysed · ${state.live.mode === "batch"
+        ? `${Math.round((live.progress ?? 0) * 100)}% of video` : `${live.dropped} dropped to stay real-time`}<br>
+      Latency ${live.latency_s}s · running ${live.elapsed_s}s` : `<b>Live session</b> · ${esc(state.runId)}`;
+    return;
+  }
   $("#runMeta").innerHTML = `
-    <b>${esc(s.video)}</b> + <b>${esc(s.gps)}</b><br>
+    <b>${esc(s.video)}</b> + <b>${esc(s.gps)}</b>${s.mode && s.mode !== "batch" ? ` · <b>${esc(s.mode)}</b>` : ""}<br>
     Start ${new Date(s.video_start).toLocaleString()} · ${s.duration_s}s · ${s.resolution.join("×")}<br>
     Sync: ${esc(s.sync_method)}<br>
     ${s.frames_processed} frames · ${s.raw_detections} raw → ${s.geolocated_detections} geolocated → ${s.hazards} hazards<br>
@@ -201,6 +211,7 @@ async function loadRuns(selectId) {
 }
 
 async function loadRun(id) {
+  if (state.live) leaveLive();
   state.runId = id;
   state.run = await api(`/api/runs/${encodeURIComponent(id)}`);
   history.replaceState(null, "", `?run=${encodeURIComponent(id)}`);
@@ -218,7 +229,9 @@ async function loadRun(id) {
   render(true);
 }
 
-$("#runSelect").addEventListener("change", (e) => loadRun(e.target.value));
+$("#runSelect").addEventListener("change", (e) => {
+  if (e.target.selectedOptions[0]?.dataset.live === undefined) loadRun(e.target.value);
+});
 
 // export menu
 $("#exportBtn").addEventListener("click", (e) => { e.stopPropagation(); $("#exportMenu").classList.toggle("open"); });
@@ -244,6 +257,7 @@ $("#uploadForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
   fd.set("use_world", e.target.use_world.checked ? "true" : "false");
+  fd.set("auto_calibrate", e.target.auto_calibrate.checked ? "true" : "false");
   $("#submitUpload").disabled = true;
   $("#progress").hidden = false;
   $("#uploadError").hidden = true;
@@ -251,10 +265,12 @@ $("#uploadForm").addEventListener("submit", (e) => {
 
   const xhr = new XMLHttpRequest();
   xhr.open("POST", "/api/process");
-  xhr.upload.onprogress = (ev) => ev.lengthComputable && setProgress(ev.loaded / ev.total * .2, `Uploading… ${(ev.loaded / 1e6).toFixed(0)} MB`);
+  xhr.upload.onprogress = (ev) => ev.lengthComputable && setProgress(ev.loaded / ev.total, `Uploading… ${(ev.loaded / 1e6).toFixed(0)} MB`);
   xhr.onload = () => {
     if (xhr.status >= 300) return fail(JSON.parse(xhr.responseText).detail || xhr.statusText);
-    poll(JSON.parse(xhr.responseText).id);
+    const info = JSON.parse(xhr.responseText);
+    dlg.close();
+    joinLive(info.id, info.mode);           // watch the drive being processed on the map
   };
   xhr.onerror = () => fail("Upload failed");
   xhr.send(fd);
@@ -269,17 +285,193 @@ function fail(msg) {
   $("#uploadError").hidden = false;
   $("#submitUpload").disabled = false;
 }
-async function poll(jobId) {
-  const job = await api(`/api/jobs/${jobId}`);
-  if (job.state === "error") return fail(job.error);
-  if (job.state === "done") {
-    setProgress(1, "Done");
-    dlg.close();
-    return loadRuns(job.run_id);
+
+const wantLive = new URLSearchParams(location.search).get("live");   // read before loadRuns rewrites the URL
+loadRuns().then(() => checkActiveLive(wantLive)).catch((e) => console.error(e));
+
+// ---------------------------------------------------------------- live mode
+const liveDlg = $("#liveDlg");
+const vehicleIcon = (heading) => L.divIcon({
+  className: "", iconSize: [34, 34], iconAnchor: [17, 17],
+  html: `<div class="vehicle"><div class="arrow" style="transform: rotate(${heading ?? 0}deg)${heading == null ? ";opacity:0" : ""}"></div></div>`,
+});
+let vehicle = null, trail = null, routeLine = null;
+
+$("#goLiveBtn").addEventListener("click", () => {
+  $("#replayError").hidden = true;
+  $("#replaySubmit").disabled = false;
+  liveDlg.showModal();
+});
+liveDlg.addEventListener("click", (e) => { if (e.target.matches("[data-close]")) liveDlg.close(); });
+liveDlg.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => {
+  liveDlg.querySelectorAll(".tab").forEach((x) => { x.classList.toggle("active", x === t); x.setAttribute("aria-selected", x === t); });
+  liveDlg.querySelectorAll(".tab-panel").forEach((p) => { p.hidden = p.dataset.panel !== t.dataset.tab; });
+}));
+
+$("#replayForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  fd.set("use_world", e.target.use_world.checked ? "true" : "false");
+  fd.set("auto_calibrate", e.target.auto_calibrate.checked ? "true" : "false");
+  $("#replaySubmit").disabled = true;
+  $("#replaySubmit").textContent = "Uploading…";
+  try {
+    const info = await api("/api/live/replay", { method: "POST", body: fd });
+    liveDlg.close();
+    joinLive(info.id, "replay");
+  } catch (err) {
+    $("#replayError").textContent = err.message;
+    $("#replayError").hidden = false;
+  } finally {
+    $("#replaySubmit").disabled = false;
+    $("#replaySubmit").textContent = "Start replay";
   }
-  const frac = job.stage === "detecting" ? .2 + job.progress * .75 : job.stage === "geolocating" ? .97 : .2;
-  setProgress(frac, `${job.stage[0].toUpperCase() + job.stage.slice(1)}… ${job.stage === "detecting" ? Math.round(job.progress * 100) + "%" : ""}`);
-  setTimeout(() => poll(jobId), 1000);
+});
+
+$("#phoneCreate").addEventListener("click", async () => {
+  const fd = new FormData();
+  fd.set("name", "phone drive");
+  const info = await api("/api/live/device", { method: "POST", body: fd });
+  const url = info.phone_urls[0];
+  $("#phoneUrl").href = url;
+  $("#phoneUrl").textContent = url;
+  $("#phoneWarn").hidden = info.secure;
+  if (window.qrcode) {
+    const qr = qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    $("#phoneQr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  }
+  $("#phoneSetup").hidden = true;
+  $("#phoneLink").hidden = false;
+  joinLive(info.id, "device");
+});
+
+function joinLive(id, mode) {
+  if (state.live) leaveLive();
+  $("#liveBanner").hidden = true;
+  state.runId = id;
+  state.run = { summary: {}, hazards: { features: [] }, trajectory: { features: [] } };
+  state.live = { id, mode, stats: null, ws: null, follow: true };
+  history.replaceState(null, "", `?live=${encodeURIComponent(id)}`);
+  trajLayer.clearLayers();
+  hazardLayer.clearLayers();
+  routeLine = L.polyline([], { color: "#4f8cff", weight: 3, opacity: .35, dashArray: "6 8" }).addTo(trajLayer);
+  trail = L.polyline([], { color: "#4f8cff", weight: 5, opacity: .95 }).addTo(trajLayer);
+  vehicle = null;
+  $("#emptyState").hidden = true;
+  $("#runSelect").querySelector("option[data-live]")?.remove();
+  $("#runSelect").insertAdjacentHTML("afterbegin", `<option data-live value="${esc(id)}">● LIVE · ${esc(id)}</option>`);
+  $("#runSelect").value = id;
+  $("#livePanel").hidden = false;
+  $("#liveMode").textContent = { device: "phone camera", replay: "replay", batch: "processing drive" }[mode] || mode;
+  $("#liveProgress").hidden = mode === "device";
+  $("#liveProgressBar").style.width = "0%";
+  $("#liveFrame").removeAttribute("src");
+  $("#liveStats").innerHTML = "";
+  $("#liveState").textContent = "connecting…";
+  $("#liveStop").disabled = false;
+  renderSidebar();
+  render();
+
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/live/${encodeURIComponent(id)}`);
+  state.live.ws = ws;
+  ws.onmessage = (m) => onLiveEvent(JSON.parse(m.data));
+  ws.onclose = () => { if (state.live?.ws === ws && !state.live.done) $("#liveState").textContent = "disconnected"; };
 }
 
-loadRuns().catch((e) => console.error(e));
+function leaveLive() {
+  if (!state.live) return;
+  const ws = state.live.ws;
+  state.live = null;
+  ws?.close();
+  $("#livePanel").hidden = true;
+  $("#runSelect").querySelector("option[data-live]")?.remove();
+  vehicle = trail = routeLine = null;
+}
+
+function upsertHazard(feat, isNew) {
+  const feats = state.run.hazards.features;
+  const i = feats.findIndex((f) => f.properties.id === feat.properties.id);
+  if (i >= 0) feats[i] = feat; else feats.push(feat);
+  renderSidebar();
+  render();
+  if (isNew) {
+    const el = state.layers[feat.properties.id]?.getLayers().find((l) => l.getElement)?.getElement();
+    el?.querySelector(".hz-icon")?.classList.add("drop");
+  }
+}
+
+function moveVehicle(lat, lon, heading) {
+  const ll = [lat, lon];
+  if (!vehicle) vehicle = L.marker(ll, { icon: vehicleIcon(heading), zIndexOffset: 1000, keyboard: false }).addTo(trajLayer);
+  else { vehicle.setLatLng(ll); vehicle.setIcon(vehicleIcon(heading)); }
+  trail.addLatLng(ll);
+  if ($("#liveFollow").checked) {
+    if (map.getZoom() < 16) map.setView(ll, 17, { animate: false });
+    else if (!map.getBounds().pad(-0.25).contains(ll)) map.panTo(ll, { animate: true, duration: .4 });
+  }
+}
+
+function showStats(st) {
+  state.live.stats = st;
+  $("#liveStats").innerHTML = [
+    ["fps", st.fps], ["latency", `${st.latency_s}s`], ["hazards", st.hazards], ["km", st.route_km],
+  ].map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join("");
+  $("#liveState").textContent = `${st.frames} frames · ${st.dropped} dropped`;
+  if (st.progress != null) $("#liveProgressBar").style.width = `${Math.round(st.progress * 100)}%`;
+  renderSidebar();
+}
+
+function onLiveEvent(ev) {
+  if (!state.live) return;
+  switch (ev.type) {
+    case "status":
+      $("#liveState").textContent = { queued: "waiting for GPU…", calibrating: "calibrating camera…", running: state.live.mode === "device" ? "waiting for phone…" : "running",
+        finalizing: "saving run…" }[ev.state] || ev.state;
+      break;
+    case "route":
+      routeLine?.setLatLngs(ev.feature.geometry.coordinates.map(([x, y]) => [y, x]));
+      if (routeLine?.getLatLngs().length) map.fitBounds(routeLine.getBounds(), { padding: [60, 60], maxZoom: 17 });
+      break;
+    case "snapshot":
+      trail?.setLatLngs(ev.trail.map(([x, y]) => [y, x]));
+      state.run.hazards.features = ev.features;
+      if (ev.trail.length) { const [x, y] = ev.trail.at(-1); moveVehicle(y, x, null); }
+      showStats(ev.stats);
+      render();
+      break;
+    case "pose": moveVehicle(ev.lat, ev.lon, ev.heading); break;
+    case "hazard": upsertHazard(ev.feature, ev.new); break;
+    case "frame": $("#liveFrame").src = `data:image/jpeg;base64,${ev.jpeg}`; break;
+    case "stats": showStats(ev); break;
+    case "error":
+      $("#liveState").textContent = `error: ${ev.message}`;
+      state.live.done = true;
+      break;
+    case "done":
+      state.live.done = true;
+      $("#liveState").textContent = ev.run_id ? "saved" : "nothing streamed — not saved";
+      setTimeout(() => { leaveLive(); loadRuns(ev.run_id || undefined); }, ev.run_id ? 800 : 2500);
+      break;
+  }
+}
+
+$("#liveStop").addEventListener("click", async () => {
+  if (!state.live) return;
+  $("#liveStop").disabled = true;
+  $("#liveState").textContent = "stopping…";
+  await api(`/api/live/${encodeURIComponent(state.live.id)}/stop`, { method: "POST" }).catch(() => {});
+});
+
+async function checkActiveLive(want) {
+  const active = await api("/api/live").catch(() => []);
+  const hit = active.find((a) => a.id === want) || (want ? null : active[0]);
+  if (hit && want) return joinLive(hit.id, hit.mode);
+  if (hit) {
+    $("#liveBanner").innerHTML = `<span class="rec"></span> Live ${hit.mode === "device" ? "phone" : "replay"} session running
+      <button class="btn primary" id="joinLive">Watch live</button>`;
+    $("#liveBanner").hidden = false;
+    $("#joinLive").onclick = () => joinLive(hit.id, hit.mode);
+  }
+}

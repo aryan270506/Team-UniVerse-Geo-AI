@@ -1,28 +1,25 @@
-"""FastAPI backend: upload video+GPS, run the pipeline in the background, serve results.
+"""FastAPI backend: upload video+GPS, process it through the live engine, serve results.
 
     .venv/bin/uvicorn server.app:app --port 8000
 """
+import asyncio
 import json
 import re
 import shutil
-import traceback
-import uuid
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from hazardmap.config import RUNS_DIR, PipelineConfig, ROOT
-from hazardmap.pipeline import run as run_pipeline
+from hazardmap.config import RUNS_DIR, ROOT
+
+from .live import router as live_router, start_file_session
+from .workers import make_cfg, new_run_id, num as _num
 
 app = FastAPI(title="HazardMap")
+app.include_router(live_router)
 RUNS_DIR.mkdir(exist_ok=True)
-# One worker: the GPU (MPS) and the stateful trackers are not shared safely.
-executor = ThreadPoolExecutor(max_workers=1)
-jobs: dict[str, dict] = {}
 
 _ID = re.compile(r"^[\w\-]+$")
 
@@ -71,10 +68,11 @@ def download(run_id: str, name: str):
 async def process(video: UploadFile = File(...), gps: UploadFile = File(...),
                   name: str = Form(""), sample_fps: float = Form(5.0),
                   time_offset: float = Form(0.0), use_world: bool = Form(True),
-                  cam_height: float = Form(1.3), cam_pitch: float = Form(6.0),
-                  hfov: float = Form(70.0)):
-    slug = re.sub(r"[^\w\-]+", "-", name.strip().lower()).strip("-") or "drive"
-    run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{slug}"[:60]
+                  camera: str = Form("phone"), auto_calibrate: bool = Form(True),
+                  cam_height: str = Form(""), cam_pitch: str = Form(""),
+                  hfov: str = Form(""), hood: str = Form(""),
+                  road_half_width: float = Form(6.0)):
+    run_id = new_run_id(name)
     d = RUNS_DIR / run_id / "input"
     d.mkdir(parents=True)
     vpath = d / ("video" + Path(video.filename or "v.mp4").suffix.lower())
@@ -83,34 +81,13 @@ async def process(video: UploadFile = File(...), gps: UploadFile = File(...),
         with open(dst, "wb") as f:
             shutil.copyfileobj(up.file, f)
 
-    cfg = PipelineConfig(sample_fps=sample_fps, time_offset_s=time_offset, use_world=use_world)
-    cfg.camera.height_m, cfg.camera.pitch_deg, cfg.camera.hfov_deg = cam_height, cam_pitch, hfov
-    job_id = uuid.uuid4().hex[:12]
-    jobs[job_id] = {"id": job_id, "run_id": run_id, "state": "queued", "stage": "queued",
-                    "progress": 0.0, "error": None}
-
-    def work():
-        job = jobs[job_id]
-        job["state"] = "running"
-
-        def progress(stage, frac):
-            job["stage"], job["progress"] = stage, round(frac, 3)
-        try:
-            run_pipeline(str(vpath), str(gpath), RUNS_DIR / run_id, cfg, progress=progress)
-            job["state"] = "done"
-        except Exception as e:  # surface pipeline errors to the UI
-            traceback.print_exc()
-            job["state"], job["error"] = "error", str(e)
-
-    executor.submit(work)
-    return jobs[job_id]
-
-
-@app.get("/api/jobs/{job_id}")
-def job_status(job_id: str):
-    if job_id not in jobs:
-        raise HTTPException(404)
-    return jobs[job_id]
+    cfg = make_cfg(sample_fps, time_offset, use_world, camera, auto_calibrate,
+                   _num(cam_height), _num(cam_pitch), _num(hfov), _num(hood), road_half_width)
+    # Same engine as live replay, but unpaced: every frame is analysed as fast as the GPU
+    # allows while the dashboard watches the drive unfold.
+    lv = start_file_session(vpath, gpath, name or video.filename or run_id, cfg, None,
+                            asyncio.get_running_loop())
+    return lv.info()
 
 
 app.mount("/runs", StaticFiles(directory=RUNS_DIR), name="runs")

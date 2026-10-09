@@ -32,6 +32,7 @@
           <a role="menuitem" data-file="summary.json">Run summary (JSON)</a>
         </div>
       </div>
+      <button class="btn live-btn" id="goLiveBtn"><span class="rec" aria-hidden="true"></span>Go live</button>
       <button class="btn primary" id="newRunBtn">+ Process drive</button>
     </div>
   </header>
@@ -61,6 +62,21 @@
     <section class="map-wrap">
       <div id="map" aria-label="Hazard map"></div>
       <div class="map-legend" id="legend"></div>
+      <div class="live-banner" id="liveBanner" hidden></div>
+      <aside class="live-panel" id="livePanel" hidden aria-live="polite">
+        <header>
+          <span class="live-tag"><span class="rec" aria-hidden="true"></span>LIVE</span>
+          <span class="live-mode" id="liveMode"></span>
+          <label class="follow"><input type="checkbox" id="liveFollow" checked> follow</label>
+        </header>
+        <img id="liveFrame" alt="Latest analysed frame with detections">
+        <div class="live-progress" id="liveProgress"><span id="liveProgressBar"></span></div>
+        <div class="live-stats" id="liveStats"></div>
+        <div class="live-actions">
+          <span class="muted" id="liveState">connecting…</span>
+          <button class="btn danger" id="liveStop">Stop &amp; save</button>
+        </div>
+      </aside>
       <div class="empty" id="emptyState" hidden>
         <h2>No drives processed yet</h2>
         <p>Upload a dashcam video and its GPS log to map road hazards.</p>
@@ -72,24 +88,34 @@
   <dialog id="uploadDlg">
     <form id="uploadForm" method="dialog">
       <h2>Process a drive</h2>
-      <p class="muted">Video (MP4/MOV) plus a time-stamped GPS track (GPX, or CSV with time, lat, lon).</p>
+      <p class="muted">Video (MP4/MOV) plus a time-stamped GPS track (GPX, or CSV with time, lat, lon). The drive is analysed at full GPU speed and you watch it unfold on the map.</p>
       <label class="field">Drive name<input name="name" placeholder="e.g. Kothrud after rain" maxlength="40"></label>
       <div class="row">
         <label class="field file">Video<input type="file" name="video" accept="video/*" required></label>
         <label class="field file">GPS track<input type="file" name="gps" accept=".gpx,.csv" required></label>
       </div>
+      <div class="row">
+        <label class="field">Camera type<select name="camera">
+            <option value="phone">Phone on windscreen</option>
+            <option value="dashcam">Dashcam (wide, bonnet visible)</option>
+            <option value="action">Helmet / action cam (bike)</option>
+          </select></label>
+        <label class="field check"><input type="checkbox" name="auto_calibrate" checked> Auto-calibrate tilt from the horizon</label>
+      </div>
+      <label class="field check"><input type="checkbox" name="use_world" checked> Open-vocab hazards (trees, flood, debris)</label>
       <details>
-        <summary>Camera &amp; sync settings</summary>
+        <summary>Advanced: override camera numbers &amp; sync</summary>
         <div class="row three">
-          <label class="field">Camera height (m)<input type="number" name="cam_height" value="1.3" step="0.1"></label>
-          <label class="field">Pitch down (°)<input type="number" name="cam_pitch" value="6" step="0.5"></label>
-          <label class="field">Horizontal FOV (°)<input type="number" name="hfov" value="70" step="1"></label>
+          <label class="field">Camera height (m)<input type="number" name="cam_height" placeholder="preset" step="0.1"></label>
+          <label class="field">Pitch down (°)<input type="number" name="cam_pitch" placeholder="auto" step="0.5"></label>
+          <label class="field">Horizontal FOV (°)<input type="number" name="hfov" placeholder="preset" step="1"></label>
         </div>
         <div class="row three">
+          <label class="field">Bonnet fraction<input type="number" name="hood" placeholder="preset" step="0.01" min="0" max="0.5"></label>
+          <label class="field">Road half-width (m)<input type="number" name="road_half_width" value="6" step="0.5" min="2" max="20"></label>
           <label class="field">Analyse fps<input type="number" name="sample_fps" value="5" step="1" min="1" max="30"></label>
-          <label class="field">Time offset (s)<input type="number" name="time_offset" value="0" step="0.5"></label>
-          <label class="field check"><input type="checkbox" name="use_world" checked> Open-vocab hazards (trees, flood, debris)</label>
         </div>
+        <label class="field">Time offset (s)<input type="number" name="time_offset" value="0" step="0.5"></label>
       </details>
       <div class="progress" id="progress" hidden>
         <div class="bar"><span id="progressBar"></span></div>
@@ -103,7 +129,76 @@
     </form>
   </dialog>
 
+  <dialog id="liveDlg">
+    <div class="dlg-body">
+      <h2>Go live</h2>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" class="tab active" data-tab="replay" aria-selected="true">Replay a drive</button>
+        <button type="button" role="tab" class="tab" data-tab="phone" aria-selected="false">Phone camera</button>
+      </div>
+
+      <form id="replayForm" class="tab-panel" data-panel="replay">
+        <p class="muted">Plays a recorded video + GPS track at real-time speed through the detectors. Hazards appear on the map as the vehicle reaches them.</p>
+        <label class="field">Drive name<input name="name" placeholder="e.g. Branson tornado replay" maxlength="40"></label>
+        <div class="row">
+          <label class="field file">Video<input type="file" name="video" accept="video/*" required></label>
+          <label class="field file">GPS track<input type="file" name="gps" accept=".gpx,.csv" required></label>
+        </div>
+        <div class="row">
+          <label class="field">Speed<select name="speed"><option value="1">1× real time</option><option value="2">2×</option><option value="4">4×</option></select></label>
+          <label class="field">Camera type<select name="camera">
+            <option value="phone">Phone on windscreen</option>
+            <option value="dashcam">Dashcam (wide, bonnet visible)</option>
+            <option value="action">Helmet / action cam (bike)</option>
+          </select></label>
+        </div>
+        <div class="row">
+          <label class="field check"><input type="checkbox" name="auto_calibrate" checked> Auto-calibrate tilt</label>
+          <label class="field check"><input type="checkbox" name="use_world" checked> Open-vocab hazards</label>
+        </div>
+        <details>
+          <summary>Advanced: override camera numbers</summary>
+          <div class="row three">
+            <label class="field">Camera height (m)<input type="number" name="cam_height" placeholder="preset" step="0.1"></label>
+            <label class="field">Pitch down (°)<input type="number" name="cam_pitch" placeholder="auto" step="0.5"></label>
+            <label class="field">Horizontal FOV (°)<input type="number" name="hfov" placeholder="preset" step="1"></label>
+          </div>
+          <div class="row three">
+            <label class="field">Bonnet fraction<input type="number" name="hood" placeholder="preset" step="0.01" min="0" max="0.5"></label>
+            <label class="field">Road half-width (m)<input type="number" name="road_half_width" value="6" step="0.5" min="2" max="20"></label>
+            <label class="field">Analyse fps<input type="number" name="sample_fps" value="5" step="1" min="1" max="30"></label>
+          </div>
+        </details>
+        <p class="error" id="replayError" hidden></p>
+        <div class="dlg-actions">
+          <button type="button" class="btn ghost" data-close>Close</button>
+          <button type="submit" class="btn primary" id="replaySubmit">Start replay</button>
+        </div>
+      </form>
+
+      <div class="tab-panel" data-panel="phone" hidden>
+        <p class="muted">Turn a phone into the dashcam. Phone and laptop must be on the same Wi-Fi / hotspot, and the server must run over HTTPS for the phone to allow camera + GPS (see README).</p>
+        <div class="phone-setup" id="phoneSetup">
+          <button type="button" class="btn primary" id="phoneCreate">Create phone session</button>
+        </div>
+        <div class="phone-link" id="phoneLink" hidden>
+          <div class="qr" id="phoneQr"></div>
+          <div>
+            <p>Scan with the phone, or open:</p>
+            <a id="phoneUrl" target="_blank" rel="noopener"></a>
+            <p class="warn" id="phoneWarn" hidden>This page is served over plain HTTP — phones will block the camera. Start the HTTPS server (tools/make_cert.sh).</p>
+            <p class="muted">This dashboard is already following the session; the map updates as soon as the phone starts streaming.</p>
+          </div>
+        </div>
+        <div class="dlg-actions">
+          <button type="button" class="btn ghost" data-close>Close</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

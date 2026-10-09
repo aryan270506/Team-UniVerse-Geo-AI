@@ -1,4 +1,5 @@
 {
+ "mode": "batch",
  "video": "branson.mp4",
  "gps": "branson.gpx",
  "video_start": "2012-03-01T17:00:00.000+00:00",
@@ -10,16 +11,26 @@
  ],
  "frames_processed": 560,
  "raw_detections": 46,
+ "inference_fps": 17.9,
+ "wall_time_s": 39.0,
+ "calibration": {
+  "camera": "dashcam",
+  "hfov_deg": 105.0,
+  "hood_frac": 0.12,
+  "preset_pitch_deg": 3.0,
+  "horizon": 0.575,
+  "horizon_confidence": 0.51,
+  "source": "horizon",
+  "pitch_deg": -5.7
+ },
  "geolocated_detections": 42,
- "hazards": 7,
+ "hazards": 6,
  "by_category": {
-  "crack": 7
+  "crack": 6
  },
  "by_severity": {
-  "low": 7
+  "low": 6
  },
- "inference_fps": 23.5,
- "wall_time_s": 29.4,
  "device": "mps",
  "route_km": 2.16,
  "bbox": [
@@ -30,24 +41,37 @@
  ],
  "config": {
   "sample_fps": 5.0,
+  "camera_preset": "dashcam",
+  "auto_calibrate": true,
   "rdd_conf": 0.2,
   "world_conf": 0.08,
   "use_world": true,
   "verify": true,
   "verify_threshold": 0.45,
   "world_max_area": 0.35,
+  "scene_verify_threshold": 0.55,
+  "scene_check": true,
+  "scene_thresholds": {
+   "flooding": 0.55,
+   "landslide": 0.65
+  },
+  "scene_window": 5,
+  "scene_min_hits": 3,
+  "road_min_frames": 3,
   "device": "mps",
   "rdd_imgsz": 1280,
   "world_imgsz": 640,
+  "road_half_width_m": 6.0,
   "cluster_eps_m": 8.0,
+  "scene_cluster_eps_m": 25.0,
   "min_frames": 2,
   "max_gps_gap_s": 15.0,
   "time_offset_s": 0.0,
   "camera": {
    "height_m": 1.3,
-   "pitch_deg": -7.0,
+   "pitch_deg": -5.675624584253672,
    "hfov_deg": 105.0,
-   "hood_frac": 0.17,
+   "hood_frac": 0.12,
    "min_dist_m": 2.0,
    "max_dist_m": 40.0
   },
