@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 
 HTTPS_PORT = int(os.environ.get("HAZARDMAP_HTTPS_PORT", "8443"))
-app = FastAPI(title="HazardMap redirect")
+app = FastAPI(title="TerraTrace redirect")
 
 
 @app.api_route("/{path:path}", methods=["GET", "HEAD"])

@@ -20,7 +20,7 @@ from .places import place_for
 from .live import router as live_router, start_file_session
 from .workers import make_cfg, new_run_id, num as _num
 
-app = FastAPI(title="HazardMap")
+app = FastAPI(title="TerraTrace")
 app.include_router(live_router)
 app.include_router(cases_router)
 RUNS_DIR.mkdir(exist_ok=True)

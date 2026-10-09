@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111111">
-  <title>HazardMap Dashcam</title>
+  <title>TerraTrace Dashcam</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root { --p1: #ef4444; --ok: #10b981; --warn: #f59e0b; color-scheme: dark; }
@@ -16,8 +17,8 @@
       font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #9ca3af; }
     .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--p1); }
-    .brand { position: fixed; left: 12px; top: calc(env(safe-area-inset-top) + 58px); display: flex; align-items: center; gap: 8px; font-weight: 600; background: #111; padding: 6px 10px; border-radius: 10px; }
-    .brand i { width: 8px; height: 8px; background: var(--p1); border-radius: 50%; display: inline-block; }
+    .brand { position: fixed; left: 12px; top: calc(env(safe-area-inset-top) + 58px); display: flex; align-items: center; background: #111; padding: 8px 12px; border-radius: 10px; }
+    .brand img { height: 16px; width: auto; display: block; }
     .bottom { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 10px); padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center;
       background: #fff; color: #111; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
     .hazards b { display: block; font-size: 40px; font-weight: 600; line-height: 1; }
@@ -42,7 +43,7 @@
     <span class="pill"><span id="rate">0 fps</span></span>
     <span class="pill"><span id="lat">– s</span></span>
   </div>
-  <div class="brand" aria-hidden="true"><i></i>HazardMap</div>
+  <div class="brand"><img src="img/terratrace-logo-light.png" alt="TerraTrace"></div>
   <div class="bottom">
     <div class="hazards" aria-live="polite"><b id="hz">0</b><span>Hazards mapped</span></div>
     <button class="big" id="go" aria-label="Start streaming">Start</button>

@@ -23,7 +23,7 @@ def _lookup(lat: float, lon: float) -> str | None:
         _last[0] = time.time()
     q = urllib.parse.urlencode({"lat": f"{lat:.5f}", "lon": f"{lon:.5f}", "format": "jsonv2", "zoom": 12, "accept-language": "en"})
     req = urllib.request.Request(f"https://nominatim.openstreetmap.org/reverse?{q}",
-                                 headers={"User-Agent": "HazardMap-hackathon/0.1 (road hazard mapping demo)"})
+                                 headers={"User-Agent": "TerraTrace-hackathon/0.1 (road hazard mapping demo)"})
     data = json.load(urllib.request.urlopen(req, timeout=3))
     a = data.get("address", {})
     local = a.get("village") or a.get("town") or a.get("city") or a.get("suburb") or a.get("county") or a.get("state_district")

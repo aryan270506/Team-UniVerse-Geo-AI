@@ -16,7 +16,7 @@ done
 
 openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
   -keyout certs/key.pem -out certs/cert.pem \
-  -subj "/CN=HazardMap local" -addext "subjectAltName=$SAN" 2>/dev/null
+  -subj "/CN=TerraTrace local" -addext "subjectAltName=$SAN" 2>/dev/null
 
 echo "certificate for: $SAN"
 echo "run: .venv/bin/uvicorn server.app:app --host 0.0.0.0 --port 8443 --ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem"

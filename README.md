@@ -1,4 +1,6 @@
-# HazardMap — dashcam video → geolocated road hazards
+# TerraTrace — dashcam video → geolocated road hazards
+
+<img src="web/img/terratrace-logo.png" alt="TerraTrace" height="40">
 
 Edge-to-GIS pipeline: dashcam/phone **MP4 + GPX/CSV** → hazard detection → pixel-to-lat/lon
 projection → deduplicated **GeoJSON** (points + lines) → **Leaflet** dashboard.
@@ -37,7 +39,7 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 ## Hazard CRM (dashboard)
 
-Soft tracking-dashboard design (light canvas, black icon rail, white rounded cards, pastel gradient panels, pill status chips, Poppins). Every hazard the AI confirms becomes a **case** (`HM-0001`…) that departments work through:
+Soft tracking-dashboard design (light canvas, black icon rail, white rounded cards, pastel gradient panels, pill status chips, Poppins). Every hazard the AI confirms becomes a **case** (`TT-0001`…) that departments work through:
 
 `NEW → VERIFIED → ASSIGNED → IN PROGRESS → RESOLVED`
 

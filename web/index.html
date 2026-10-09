@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>HazardMap — Road Hazard Tracking</title>
+  <title>TerraTrace — Road Hazard Tracking</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <meta name="description" content="Dashcam video to geolocated road hazard cases for municipal and disaster-response teams.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
@@ -15,7 +16,7 @@
 <body>
   <div class="app">
     <nav class="rail" aria-label="Primary">
-      <a class="brand" href="#/home" aria-label="HazardMap home"><span class="brand-mark" aria-hidden="true"><i></i></span></a>
+      <a class="brand" href="#/home" aria-label="TerraTrace home"><img class="brand-mark" src="img/terratrace-mark.svg" alt=""></a>
       <ul class="nav" id="nav">
         <li><a href="#/home" data-route="home" aria-label="Home"><i data-lucide="house"></i><span class="tip">Home · live map</span></a></li>
         <li><a href="#/cases" data-route="cases" aria-label="Cases"><i data-lucide="layout-grid"></i><span class="tip">Cases</span><span class="badge" id="navOpen" hidden></span></a></li>
@@ -31,6 +32,7 @@
 
     <div class="main">
       <header class="topbar">
+        <a class="wordmark" href="#/home" aria-label="TerraTrace home"><img src="img/terratrace-logo.png" alt="TerraTrace"></a>
         <div class="search">
           <i data-lucide="search"></i>
           <input id="globalSearch" type="search" placeholder="Search cases, drives, departments" autocomplete="off" aria-label="Search">

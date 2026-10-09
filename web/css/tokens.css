@@ -1,5 +1,5 @@
 /* =====================================================================
-   HazardMap design tokens: soft tracking dashboard.
+   TerraTrace design tokens: soft tracking dashboard.
    Light canvas, white rounded cards, black accents, pastel gradients,
    pill chips with coloured dots. Every value used in the UI comes from here.
    ===================================================================== */
@@ -13,6 +13,12 @@
   --ink-3: #9ca3af;
   --line: #e6e6ea;
   --rail: #111111;
+
+  /* brand (TerraTrace logo orange) */
+  --brand: #ff6a2b;
+  --brand-1: #ffa552;
+  --brand-2: #ff4f1f;
+  --grad-brand: linear-gradient(135deg, var(--brand-1) 0%, var(--brand-2) 100%);
 
   /* gradients (hero cards) */
   --grad-lilac: linear-gradient(120deg, #efeaff 0%, #f6ecff 45%, #fbe8f3 100%);

@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hazard Incident Report</title>
+  <title>TerraTrace Incident Report</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
@@ -16,8 +17,7 @@
     .page { max-width: 900px; margin: 12px auto 32px; background: #fff; padding: 40px 48px; border-radius: 24px; box-shadow: 0 1px 2px rgba(17,17,17,.04), 0 10px 30px rgba(17,17,17,.06); }
     header.r { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
     .brand { display: flex; gap: 14px; align-items: center; }
-    .logo { width: 44px; height: 44px; border-radius: 12px; background: #111; position: relative; flex: none; }
-    .logo::after { content: ""; position: absolute; right: 8px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--p1); }
+    .logo { height: 26px; width: auto; flex: none; }
     h1 { font-size: 24px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
     .sub { font-size: 12px; color: var(--ink-2); }
     .stamp { text-align: right; font-size: 12px; color: var(--ink-2); }
@@ -61,8 +61,8 @@
   </div>
   <main class="page" id="page">
     <header class="r">
-      <div class="brand"><span class="logo" aria-hidden="true"></span>
-        <div><div class="sub">HazardMap · Incident report</div><h1 id="title">Road Hazard Incident Report</h1></div></div>
+      <div class="brand"><img class="logo" src="img/terratrace-logo.png" alt="TerraTrace">
+        <div><div class="sub">Incident report</div><h1 id="title">Road Hazard Incident Report</h1></div></div>
       <div class="stamp"><b id="refNo"></b><span id="genAt"></span></div>
     </header>
     <div class="urgent" id="urgent" hidden></div>
@@ -76,7 +76,7 @@
     <h2 data-n="04">Hazards requiring action</h2>
     <div id="hazards"></div>
     <div class="sig"><div>Verified by (field officer)</div><div>Forwarded to (department / date)</div></div>
-    <footer class="r"><span>Generated automatically by HazardMap. Coordinates WGS84; detections are AI-generated and should be field-verified.</span><span id="foot"></span></footer>
+    <footer class="r"><span>Generated automatically by TerraTrace. Coordinates WGS84; detections are AI-generated and should be field-verified.</span><span id="foot"></span></footer>
   </main>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
@@ -108,7 +108,7 @@
 
       document.title = `Incident report ${runId}`;
       $("#title").textContent = only ? `Hazard Incident Report · ${only}` : "Road Hazard Incident Report";
-      $("#refNo").textContent = `Ref. HM-${runId}${only ? "-" + only : ""}`;
+      $("#refNo").textContent = `Ref. TT-${runId}${only ? "-" + only : ""}`;
       $("#genAt").textContent = `Generated ${new Date().toLocaleString()}`;
       $("#foot").textContent = `hazards.geojson · ${run.hazards.features.length} features`;
       if (high.length) {

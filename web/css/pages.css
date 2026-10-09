@@ -160,6 +160,7 @@
   .nav a .tip { display: none; }
   .topbar { height: auto; flex-wrap: wrap; }
   .search { flex: 1 1 100%; order: 3; }
+  .wordmark img { height: 20px; }
   .user .name { display: none; }
   .home { gap: var(--s-3); }
   .tc-facts { grid-template-columns: 1fr 1fr; }

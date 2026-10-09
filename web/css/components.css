@@ -9,10 +9,9 @@
   background: var(--rail); border-radius: 28px; padding: var(--s-5) 0; z-index: 20;
 }
 .brand { width: 52px; height: 52px; border-radius: 14px; background: #fff; display: grid; place-items: center; margin-bottom: var(--s-7); text-decoration: none; flex: none; }
-.brand-mark { position: relative; width: 22px; height: 22px; }
-.brand-mark::before { content: ""; position: absolute; left: 1px; top: 2px; width: 4px; height: 18px; background: #111; border-radius: 2px; box-shadow: 13px 0 0 #111; }
-.brand-mark::after { content: ""; position: absolute; left: 4px; top: 3px; width: 16px; height: 4px; background: #111; border-radius: 2px; transform: rotate(52deg); transform-origin: left center; }
-.brand-mark i { position: absolute; right: -4px; top: -4px; width: 7px; height: 7px; border-radius: 50%; background: var(--p1); }
+.brand-mark { width: 30px; height: 30px; display: block; }
+.wordmark { flex: none; display: flex; align-items: center; text-decoration: none; }
+.wordmark img { height: 24px; width: auto; display: block; }
 
 .nav { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-4); width: 100%; flex: 1; }
 .nav li { position: relative; display: flex; justify-content: center; }

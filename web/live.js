@@ -1,4 +1,4 @@
-// Phone-as-dashcam: stream rear camera frames + GPS fixes to the HazardMap server.
+// Phone-as-dashcam: stream rear camera frames + GPS fixes to the TerraTrace server.
 // Binary frame message = [float64 little-endian capture time (ms)] + [JPEG bytes].
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -40,7 +40,7 @@ function connect() {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/live/${encodeURIComponent(sessionId)}/ingest`);
     ws.binaryType = "arraybuffer";
     ws.onopen = () => { setNet("ok", "connected"); resolve(); };
-    ws.onerror = () => reject(new Error("Could not open the live connection to the laptop. Check the phone is on the same Wi-Fi/hotspot and the HazardMap HTTPS server is running."));
+    ws.onerror = () => reject(new Error("Could not open the live connection to the laptop. Check the phone is on the same Wi-Fi/hotspot and the TerraTrace HTTPS server is running."));
     ws.onclose = () => { setNet("bad", "disconnected"); inflight = false; if (running) setTimeout(reconnect, 1500); };
     ws.onmessage = (m) => {
       const msg = JSON.parse(m.data);

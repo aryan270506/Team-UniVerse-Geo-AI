@@ -53,6 +53,8 @@ def _db() -> sqlite3.Connection:
                 kind TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS activity_case ON activity(case_id, ts);
         """)
+        with _conn:  # rebrand: older logs credit the pre-rename AI actor
+            _conn.execute("UPDATE activity SET actor = 'TerraTrace AI' WHERE actor = 'HazardMap AI'")
     return _conn
 
 
@@ -95,7 +97,7 @@ def sync():
                     (cid, d.name, p["id"], PRIORITY_OF.get(p["severity"], "P3"),
                      DEPARTMENTS[DEPT_OF.get(p["category"], 0)], p["first_seen"], _now()))
                 if cur.rowcount:
-                    conn.execute("INSERT INTO activity (case_id, ts, kind, actor, text) VALUES (?, ?, 'detected', 'HazardMap AI', ?)",
+                    conn.execute("INSERT INTO activity (case_id, ts, kind, actor, text) VALUES (?, ?, 'detected', 'TerraTrace AI', ?)",
                                  (cid, p["first_seen"], f"Detected {CATEGORY_LABEL.get(p['category'], p['category'])} "
                                   f"({p['severity']}, {round(p['confidence'] * 100)}% confidence) on drive {d.name}"))
     for gone in set(_index["features"]) - seen:                 # run deleted
@@ -110,7 +112,7 @@ def _case_dict(row: sqlite3.Row) -> dict | None:
     p = feat["properties"]
     s = _index["summaries"].get(row["run_id"], {})
     return {
-        "id": row["id"], "number": f"HM-{row['num']:04d}", "run_id": row["run_id"], "hazard_id": row["hazard_id"],
+        "id": row["id"], "number": f"TT-{row['num']:04d}", "run_id": row["run_id"], "hazard_id": row["hazard_id"],
         "status": row["status"], "priority": row["priority"], "department": row["department"],
         "assignee": row["assignee"], "created_at": row["created_at"], "updated_at": row["updated_at"],
         "resolved_at": row["resolved_at"],
@@ -147,7 +149,7 @@ def _activity(case_id: str | None = None, limit: int = 200) -> list[dict]:
         args = (case_id,)
     q += " ORDER BY a.ts DESC, a.id DESC LIMIT ?"
     rows = _db().execute(q, (*args, limit)).fetchall()
-    return [{"case_id": r["case_id"], "number": f"HM-{r['num']:04d}", "ts": r["ts"], "kind": r["kind"],
+    return [{"case_id": r["case_id"], "number": f"TT-{r['num']:04d}", "ts": r["ts"], "kind": r["kind"],
              "actor": r["actor"], "text": r["text"]} for r in rows]
 
 
