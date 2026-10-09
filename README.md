@@ -47,7 +47,7 @@ Soft tracking-dashboard design (light canvas, black icon rail, white rounded car
 
 | Page | What it is |
 |---|---|
-| Home | Tracking view: process a new drive, selected case card (detected → target fix, responsible department), case list, live map |
+| Home | Map of every analysed drive. On load an animated tour flies to each location, grows the route from start to end, drops hazard pins as it passes them, then zooms out to everything (`GET /api/routes`; place names via cached OSM reverse geocoding) |
 | Cases | Filterable table across all drives, CSV export |
 | Board | Kanban; drag a card to change status |
 | Drives | Survey drives with a health grade, report and GeoJSON |

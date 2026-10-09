@@ -54,13 +54,13 @@ export function addCase(layer, c, { popup = true, drop = false } = {}) {
   return g;
 }
 
-export function drawRoute(layer, lonlat, { faint = false } = {}) {
+export function drawRoute(layer, lonlat, { faint = false, startDot = true } = {}) {
   const ll = lonlat.map(([x, y]) => [y, x]);
   if (ll.length < 2) return null;
   if (faint) return L.polyline(ll, { color: ROUTE_COL, weight: 3, opacity: .35, dashArray: "6 8" }).addTo(layer);
   L.polyline(ll, { color: "#ffffff", weight: 11, opacity: .85, lineCap: "round", lineJoin: "round" }).addTo(layer);   // soft casing
   const line = L.polyline(ll, { color: ROUTE_COL, weight: 6, opacity: .95, lineCap: "round", lineJoin: "round" }).addTo(layer);
-  L.circleMarker(ll[0], { radius: 6, color: "#fff", weight: 3, fillColor: "#111", fillOpacity: 1 }).bindTooltip("Drive start").addTo(layer);
+  if (startDot) L.circleMarker(ll[0], { radius: 6, color: "#fff", weight: 3, fillColor: "#111", fillOpacity: 1 }).bindTooltip("Drive start").addTo(layer);
   return line;
 }
 
@@ -113,3 +113,31 @@ export function renderClosures(layer, closures) {
 
 export const vehicleIcon = (heading) => L.divIcon({ className: "", iconSize: [30, 30], iconAnchor: [15, 15],
   html: `<div class="vehicle"><div class="arrow" style="transform: rotate(${heading ?? 0}deg)${heading == null ? ";opacity:0" : ""}"></div></div>` });
+
+// ---------- route journey animation (Home tour)
+export const startIcon = () => L.divIcon({ className: "", iconSize: [18, 18], iconAnchor: [9, 9], html: `<div class="start-dot"></div>` });
+export const headIcon = () => L.divIcon({ className: "", iconSize: [16, 16], iconAnchor: [8, 8], html: `<div class="head-dot"></div>` });
+export const endIcon = () => L.divIcon({ className: "", iconSize: [34, 46], iconAnchor: [17, 44], popupAnchor: [0, -40], html: `<div class="pin land"></div>` });
+
+const ease = (t) => (t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+
+/** Grow `line` along `ll` ([lat, lon][]) over `duration` ms; onProgress(vertexIndex, [lat, lon], fraction).
+ *  Resolves when done; the returned promise has .cancel(). */
+export function animateRoute(line, ll, { duration = 2500, onProgress } = {}) {
+  let raf = 0, cancelled = false, resolveFn;
+  const p = new Promise((resolve) => { resolveFn = resolve; });
+  const t0 = performance.now();
+  const n = ll.length - 1;
+  const frame = (now) => {
+    if (cancelled) return;
+    const f = Math.min(1, (now - t0) / duration), k = ease(f) * n, i = Math.floor(k), r = k - i;
+    const a = ll[i], b = ll[Math.min(i + 1, n)];
+    const tip = [a[0] + (b[0] - a[0]) * r, a[1] + (b[1] - a[1]) * r];
+    line.setLatLngs(ll.slice(0, i + 1).concat([tip]));
+    onProgress?.(i, tip, f);
+    if (f < 1) raf = requestAnimationFrame(frame); else resolveFn(true);
+  };
+  raf = requestAnimationFrame(frame);
+  p.cancel = () => { cancelled = true; cancelAnimationFrame(raf); resolveFn(false); };
+  return p;
+}

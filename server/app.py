@@ -16,6 +16,7 @@ from hazardmap.config import RUNS_DIR, ROOT
 
 from .cases import router as cases_router
 from .closures import closures
+from .places import place_for
 from .live import router as live_router, start_file_session
 from .workers import make_cfg, new_run_id, num as _num
 
@@ -46,6 +47,36 @@ def list_runs():
             summary.pop("config", None)
             out.append({"id": d.name, **summary})
     return out
+
+
+@app.get("/api/routes")
+def all_routes():
+    """Every analysed drive in one response, for the Home map tour (oldest first)."""
+    out = []
+    for d in RUNS_DIR.iterdir() if RUNS_DIR.exists() else []:
+        sm, tj, hz = d / "summary.json", d / "trajectory.geojson", d / "hazards.geojson"
+        if d.name.startswith("eval-") or not (sm.exists() and tj.exists() and hz.exists()):
+            continue
+        s = json.loads(sm.read_text())
+        coords = (json.loads(tj.read_text())["features"] or [{}])[0].get("geometry", {}).get("coordinates", [])
+        if len(coords) < 2:
+            continue
+        step = max(1, len(coords) // 400)
+        thin = coords[::step] + ([coords[-1]] if (len(coords) - 1) % step else [])
+        feats = json.loads(hz.read_text())["features"]
+        out.append({
+            "id": d.name, "video_start": s.get("video_start"), "mode": s.get("mode"), "video": s.get("video"),
+            "route_km": s.get("route_km"), "duration_s": s.get("duration_s"), "hazards": len(feats),
+            "coords": thin, "start": coords[0], "end": coords[-1],
+            "hazard_list": [{"id": f["properties"]["id"], "category": f["properties"]["category"],
+                             "severity": f["properties"]["severity"], "centroid": f["properties"]["centroid"],
+                             "video_time_s": f["properties"]["video_time_s"], "geometry": f["geometry"],
+                             "extent_m": f["properties"]["extent_m"], "confidence": f["properties"]["confidence"],
+                             "snapshot": f["properties"].get("snapshot")} for f in feats],
+            "place": place_for(d, coords[0][1], coords[0][0]),
+            "mtime": sm.stat().st_mtime,
+        })
+    return sorted(out, key=lambda r: r["mtime"])
 
 
 @app.get("/api/runs/{run_id}")
