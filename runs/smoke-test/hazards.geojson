@@ -1,0 +1,240 @@
+{
+ "type": "FeatureCollection",
+ "name": "road_hazards",
+ "crs": {
+  "type": "name",
+  "properties": {
+   "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+  }
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "id": "H001",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     73.8078638,
+     18.5074752
+    ]
+   },
+   "properties": {
+    "id": "H001",
+    "category": "pothole",
+    "labels": [
+     "Potholes"
+    ],
+    "severity": "medium",
+    "severity_score": 0.401,
+    "confidence": 0.215,
+    "detections": 2,
+    "frames": 2,
+    "sources": [
+     "rdd"
+    ],
+    "first_seen": "2026-10-09T05:00:00.200+00:00",
+    "last_seen": "2026-10-09T05:00:00.400+00:00",
+    "video_time_s": 0.2,
+    "min_range_m": 10.0,
+    "extent_m": 7.5,
+    "centroid": [
+     73.8078638,
+     18.5074752
+    ],
+    "gps_gap_s": 0.4,
+    "gps_quality": "good",
+    "snapshot": "snapshots/H001.jpg"
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "H002",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     73.8079676,
+     18.507629
+    ]
+   },
+   "properties": {
+    "id": "H002",
+    "category": "pothole",
+    "labels": [
+     "Potholes"
+    ],
+    "severity": "medium",
+    "severity_score": 0.408,
+    "confidence": 0.324,
+    "detections": 2,
+    "frames": 2,
+    "sources": [
+     "rdd"
+    ],
+    "first_seen": "2026-10-09T05:00:00.800+00:00",
+    "last_seen": "2026-10-09T05:00:01.001+00:00",
+    "video_time_s": 0.8,
+    "min_range_m": 5.7,
+    "extent_m": 7.7,
+    "centroid": [
+     73.8079676,
+     18.507629
+    ],
+    "gps_gap_s": 0.2,
+    "gps_quality": "good",
+    "snapshot": "snapshots/H002.jpg"
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "H003",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     73.8110718,
+     18.5089501
+    ]
+   },
+   "properties": {
+    "id": "H003",
+    "category": "pothole",
+    "labels": [
+     "Potholes"
+    ],
+    "severity": "medium",
+    "severity_score": 0.398,
+    "confidence": 0.333,
+    "detections": 3,
+    "frames": 3,
+    "sources": [
+     "rdd"
+    ],
+    "first_seen": "2026-10-09T05:00:07.207+00:00",
+    "last_seen": "2026-10-09T05:00:07.607+00:00",
+    "video_time_s": 7.21,
+    "min_range_m": 3.8,
+    "extent_m": 22.4,
+    "centroid": [
+     73.8110718,
+     18.5089501
+    ],
+    "gps_gap_s": 0.6,
+    "gps_quality": "good",
+    "snapshot": "snapshots/H003.jpg"
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "H004",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     73.8113925,
+     18.5091683
+    ]
+   },
+   "properties": {
+    "id": "H004",
+    "category": "pothole",
+    "labels": [
+     "Potholes"
+    ],
+    "severity": "medium",
+    "severity_score": 0.399,
+    "confidence": 0.362,
+    "detections": 3,
+    "frames": 3,
+    "sources": [
+     "rdd"
+    ],
+    "first_seen": "2026-10-09T05:00:08.008+00:00",
+    "last_seen": "2026-10-09T05:00:08.408+00:00",
+    "video_time_s": 8.01,
+    "min_range_m": 2.5,
+    "extent_m": 22.4,
+    "centroid": [
+     73.8113925,
+     18.5091683
+    ],
+    "gps_gap_s": 1.0,
+    "gps_quality": "good",
+    "snapshot": "snapshots/H004.jpg"
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "H005",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     73.8143861,
+     18.5096811
+    ]
+   },
+   "properties": {
+    "id": "H005",
+    "category": "pothole",
+    "labels": [
+     "Potholes"
+    ],
+    "severity": "medium",
+    "severity_score": 0.418,
+    "confidence": 0.365,
+    "detections": 2,
+    "frames": 2,
+    "sources": [
+     "rdd"
+    ],
+    "first_seen": "2026-10-09T05:00:13.613+00:00",
+    "last_seen": "2026-10-09T05:00:14.414+00:00",
+    "video_time_s": 13.61,
+    "min_range_m": 5.2,
+    "extent_m": 45.1,
+    "centroid": [
+     73.8143861,
+     18.5096811
+    ],
+    "gps_gap_s": 0.4,
+    "gps_quality": "good",
+    "snapshot": "snapshots/H005.jpg"
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "H006",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     73.8149077,
+     18.5097959
+    ]
+   },
+   "properties": {
+    "id": "H006",
+    "category": "pothole",
+    "labels": [
+     "Potholes"
+    ],
+    "severity": "medium",
+    "severity_score": 0.423,
+    "confidence": 0.377,
+    "detections": 6,
+    "frames": 6,
+    "sources": [
+     "rdd"
+    ],
+    "first_seen": "2026-10-09T05:00:14.414+00:00",
+    "last_seen": "2026-10-09T05:00:15.615+00:00",
+    "video_time_s": 14.41,
+    "min_range_m": 3.8,
+    "extent_m": 67.6,
+    "centroid": [
+     73.8149077,
+     18.5097959
+    ],
+    "gps_gap_s": 0.4,
+    "gps_quality": "good",
+    "snapshot": "snapshots/H006.jpg"
+   }
+  }
+ ]
+}

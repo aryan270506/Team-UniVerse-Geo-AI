@@ -1,0 +1,57 @@
+{
+ "video": "road_bad_25s.mp4",
+ "gps": "road_bad.gpx",
+ "video_start": "2026-10-09T05:00:00.000+00:00",
+ "sync_method": "aligned to first GPS fix",
+ "duration_s": 25.1,
+ "resolution": [
+  1280,
+  720
+ ],
+ "frames_processed": 126,
+ "raw_detections": 36,
+ "geolocated_detections": 36,
+ "hazards": 6,
+ "by_category": {
+  "pothole": 6
+ },
+ "by_severity": {
+  "medium": 6
+ },
+ "inference_fps": 20.5,
+ "wall_time_s": 9.4,
+ "device": "mps",
+ "route_km": 1.35,
+ "bbox": [
+  73.8076915,
+  18.5073798,
+  73.8155471,
+  18.5099947
+ ],
+ "config": {
+  "sample_fps": 5.0,
+  "rdd_conf": 0.2,
+  "world_conf": 0.08,
+  "use_world": true,
+  "verify": true,
+  "verify_threshold": 0.45,
+  "world_max_area": 0.35,
+  "device": "mps",
+  "rdd_imgsz": 1280,
+  "world_imgsz": 640,
+  "cluster_eps_m": 8.0,
+  "min_frames": 2,
+  "max_gps_gap_s": 15.0,
+  "time_offset_s": 0.0,
+  "camera": {
+   "height_m": 1.3,
+   "pitch_deg": 6.0,
+   "hfov_deg": 70.0,
+   "hood_frac": 0.0,
+   "min_dist_m": 2.0,
+   "max_dist_m": 40.0
+  },
+  "rdd_weights": "/Applications/XAMPP/xamppfiles/htdocs/hackathon/models/rdd_yolov8s.pt",
+  "world_weights": "/Applications/XAMPP/xamppfiles/htdocs/hackathon/models/yolov8s-worldv2.pt"
+ }
+}

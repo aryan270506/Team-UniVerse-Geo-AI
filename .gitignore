@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# model weights (download: see README)
+models/*.pt
+models/*.ts
+
+# large media
+data/raw_downloads/
+data/**/*.mp4
+data/**/*.webm
+data/**/*.gif
+data/**/*.jpg
+runs/*/input/
+weights/

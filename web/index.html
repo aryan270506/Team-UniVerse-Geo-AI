@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HazardMap — Road Hazard Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <h1>HazardMap</h1>
+        <p>Dashcam → GIS road hazard console</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="select">
+        <span class="sr-only">Drive</span>
+        <select id="runSelect" aria-label="Select drive"></select>
+      </label>
+      <div class="dropdown">
+        <button class="btn ghost" id="exportBtn" aria-haspopup="true">Export</button>
+        <div class="menu" id="exportMenu" role="menu">
+          <a role="menuitem" data-file="hazards.geojson">Hazards (GeoJSON)</a>
+          <a role="menuitem" data-file="trajectory.geojson">Trajectory (GeoJSON)</a>
+          <a role="menuitem" data-file="detections.csv">Raw detections (CSV)</a>
+          <a role="menuitem" data-file="summary.json">Run summary (JSON)</a>
+        </div>
+      </div>
+      <button class="btn primary" id="newRunBtn">+ Process drive</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="kpis" id="kpis"></section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Severity</h2></div>
+        <div class="chips" id="sevFilters"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Hazard type</h2><button class="link" id="toggleCats">none</button></div>
+        <div class="cats" id="catFilters"></div>
+      </section>
+
+      <section class="panel grow">
+        <div class="panel-head"><h2>Detected hazards</h2><span class="muted" id="listCount"></span></div>
+        <ol class="hazard-list" id="hazardList"></ol>
+      </section>
+
+      <footer class="meta" id="runMeta"></footer>
+    </aside>
+
+    <section class="map-wrap">
+      <div id="map" aria-label="Hazard map"></div>
+      <div class="map-legend" id="legend"></div>
+      <div class="empty" id="emptyState" hidden>
+        <h2>No drives processed yet</h2>
+        <p>Upload a dashcam video and its GPS log to map road hazards.</p>
+        <button class="btn primary" onclick="openUpload()">+ Process drive</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="uploadDlg">
+    <form id="uploadForm" method="dialog">
+      <h2>Process a drive</h2>
+      <p class="muted">Video (MP4/MOV) plus a time-stamped GPS track (GPX, or CSV with time, lat, lon).</p>
+      <label class="field">Drive name<input name="name" placeholder="e.g. Kothrud after rain" maxlength="40"></label>
+      <div class="row">
+        <label class="field file">Video<input type="file" name="video" accept="video/*" required></label>
+        <label class="field file">GPS track<input type="file" name="gps" accept=".gpx,.csv" required></label>
+      </div>
+      <details>
+        <summary>Camera &amp; sync settings</summary>
+        <div class="row three">
+          <label class="field">Camera height (m)<input type="number" name="cam_height" value="1.3" step="0.1"></label>
+          <label class="field">Pitch down (°)<input type="number" name="cam_pitch" value="6" step="0.5"></label>
+          <label class="field">Horizontal FOV (°)<input type="number" name="hfov" value="70" step="1"></label>
+        </div>
+        <div class="row three">
+          <label class="field">Analyse fps<input type="number" name="sample_fps" value="5" step="1" min="1" max="30"></label>
+          <label class="field">Time offset (s)<input type="number" name="time_offset" value="0" step="0.5"></label>
+          <label class="field check"><input type="checkbox" name="use_world" checked> Open-vocab hazards (trees, flood, debris)</label>
+        </div>
+      </details>
+      <div class="progress" id="progress" hidden>
+        <div class="bar"><span id="progressBar"></span></div>
+        <p class="muted" id="progressText">Uploading…</p>
+      </div>
+      <p class="error" id="uploadError" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn ghost" id="cancelUpload">Close</button>
+        <button type="submit" class="btn primary" id="submitUpload">Run pipeline</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
