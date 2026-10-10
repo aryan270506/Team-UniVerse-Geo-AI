@@ -42,6 +42,17 @@ def owner_of(run_id: str) -> int | None:
     return r["user_id"] if r else None
 
 
+def forget(run_id: str, actor: str) -> int:
+    """A deleted drive: take back the coins it earned (kept in the ledger as a revoke), void any
+    still pending, and drop the drive record so the same video can be uploaded again.
+    Returns the coins taken back."""
+    with db.tx() as c:
+        n = rewards.revoke_drive(c, run_id, actor, "Drive deleted")
+        c.execute("UPDATE coins SET status = 'void' WHERE run_id = ? AND status = 'pending'", (run_id,))
+        c.execute("DELETE FROM drives WHERE run_id = ?", (run_id,))
+    return n
+
+
 def contributors() -> dict:
     """run_id -> {name, source} for every contributed drive (admin tables)."""
     rows = db.all_("SELECT d.run_id, d.source, u.name, u.id FROM drives d JOIN users u ON u.id = d.user_id")

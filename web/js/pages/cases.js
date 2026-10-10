@@ -36,7 +36,11 @@ export default async function render(el, _params, query) {
       const n = k === "all" ? base.length : k === "open" ? base.filter((c) => c.status !== "resolved").length : base.filter((c) => c.status === k).length;
       return `<button class="${f.status === k ? "on" : ""}" data-s="${k}" role="tab" aria-selected="${f.status === k}">${l}<span class="c">${n}</span></button>`;
     }).join("");
-    const rows = cases.filter((c) => match(c)).sort((a, b) => a.priority.localeCompare(b.priority) || b.first_seen.localeCompare(a.first_seen));
+    // Newest first by when the case was added (not when the video was recorded: an uploaded
+    // 2018 drive is still new work). A drive's cases stay together, in case-number order.
+    const added = {};
+    for (const c of cases) added[c.run_id] = Math.min(added[c.run_id] ?? Infinity, c.seq);
+    const rows = cases.filter((c) => match(c)).sort((a, b) => added[b.run_id] - added[a.run_id] || a.seq - b.seq);
     $("#rows", el).innerHTML = rows.map((c) => `<tr data-href="${caseHref(c)}" tabindex="0">
       <td class="id">${esc(c.number)}</td><td><span class="kind">${glyph(c)}${esc(c.label)}</span></td>
       <td>${prioTag(c.priority)}</td><td>${statusTag(c.status)}</td><td>${esc(c.department)}</td>

@@ -30,3 +30,6 @@ data/voucher.key
 
 # regenerable photo thumbnails (route map)
 runs/*/snapshots/thumbs/
+
+# service logs
+logs/

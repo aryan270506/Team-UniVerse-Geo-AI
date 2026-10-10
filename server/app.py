@@ -15,11 +15,11 @@ from fastapi.staticfiles import StaticFiles
 
 from hazardmap.config import RUNS_DIR, ROOT
 
-from . import auth, authorities, drives, market, routes_map, weather
+from . import auth, authorities, cases, drives, market, routes_map, weather
 from .cases import router as cases_router
 from .closures import closures
 from .places import place_for
-from .live import router as live_router, start_file_session
+from .live import lives, router as live_router, start_file_session
 from .workers import make_cfg, new_run_id, num as _num
 
 app = FastAPI(title="TerraTrace")
@@ -171,7 +171,12 @@ def run_authorities(run_id: str):
 def weather_at(lat: float, lon: float, t: str | None = None):
     """Conditions at a point and time (default: now). Used by live alerts before a drive is saved."""
     from datetime import datetime, timezone
-    return {"at_capture": weather.compact(weather.at_capture(lat, lon, t or datetime.now(timezone.utc).isoformat())),
+    try:   # ISO 8601, or epoch seconds
+        when = datetime.fromtimestamp(float(t), timezone.utc) if t and t.replace(".", "", 1).isdigit() \
+            else datetime.fromisoformat(t.replace("Z", "+00:00")) if t else datetime.now(timezone.utc)
+    except ValueError:
+        raise HTTPException(400, "t must be an ISO 8601 time or epoch seconds")
+    return {"at_capture": weather.compact(weather.at_capture(lat, lon, when.isoformat())),
             "attribution": weather.ATTRIBUTION}
 
 
@@ -189,6 +194,21 @@ def download(run_id: str, name: str):
         raise HTTPException(404)
     d = _run_dir(run_id)
     return FileResponse(d / name, filename=f"{run_id}_{name}")
+
+
+@app.delete("/api/runs/{run_id}")
+def delete_run(run_id: str, request: Request):
+    """Delete a drive for good: its files, its cases and their history, and any coins it earned."""
+    admin = auth.require_admin(request)
+    d = _run_dir(run_id)
+    lv = lives.get(run_id)
+    if lv is not None and lv.state in ("queued", "running", "finalizing"):
+        raise HTTPException(409, "This drive is still live. Stop it first.")
+    lives.pop(run_id, None)
+    coins = drives.forget(run_id, admin["name"])
+    n_cases = cases.forget(run_id)
+    shutil.rmtree(d)
+    return {"deleted": run_id, "cases": n_cases, "coins_revoked": coins}
 
 
 @app.post("/api/process")

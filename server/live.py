@@ -111,9 +111,12 @@ def _guard(fn):
             fn(lv, *a)
         except Exception as e:
             traceback.print_exc()
-            lv.state, lv.error = "error", str(e)
-            drives.on_failed(lv.id, str(e))
-            lv.emit({"type": "error", "message": str(e)})
+            # ffmpeg/ffprobe failures would show the user a command line with server paths
+            msg = ("The video file could not be read. It may be damaged or in an unsupported format: "
+                   "upload an MP4, MOV or WebM." if isinstance(e, subprocess.CalledProcessError) else str(e))
+            lv.state, lv.error = "error", msg
+            drives.on_failed(lv.id, msg)
+            lv.emit({"type": "error", "message": msg})
     return wrapped
 
 
@@ -129,7 +132,8 @@ def _file_worker(lv: Live, video: str, gps: str, cfg, speed: float | None, video
     traj = Trajectory(load_gps(gps), cfg.max_gps_gap_s)
     info = video_info(video)
     t0, sync = resolve_video_start(info, traj, cfg.time_offset_s, video_start)
-    lv.route = traj.geojson()
+    route = lambda: traj.geojson(t0, t0 + info["duration"])     # only the stretch the video covers
+    lv.route = route()
     meta = {"video": Path(video).name, "gps": Path(gps).name, "sync_method": sync}
     if speed:
         meta["playback_speed"] = speed
@@ -137,7 +141,7 @@ def _file_worker(lv: Live, video: str, gps: str, cfg, speed: float | None, video
     if cfg.auto_calibrate:
         lv.emit({"type": "status", "state": "calibrating"})
         meta["calibration"] = calibrate(video, cfg, detector.world)
-    lv.session = LiveSession(cfg, lv.id, lv.mode, detector, traj.pose, traj.geojson, lv.emit, meta, source_video=video)
+    lv.session = LiveSession(cfg, lv.id, lv.mode, detector, traj.pose, route, lv.emit, meta, source_video=video)
     lv.state = "running"
     lv.emit({"type": "route", "feature": lv.route})
     lv.emit({"type": "status", "state": "running"})
@@ -249,8 +253,12 @@ def pair_links(request: Request, lv: Live, fps: float = 30.0) -> dict:
     """QR / link targets for a phone. Phones only allow camera + GPS on HTTPS, so the links
     always point at the HTTPS server, on every LAN address of this machine."""
     secure = request.url.scheme == "https"
-    port = request.url.port if secure and request.url.port else int(os.environ.get("HAZARDMAP_HTTPS_PORT", "8443"))
     q = f"live.html?s={lv.id}&fps={fps:g}&k={lv.pair_key}"
+    if secure and request.url.port is None:
+        # behind an HTTPS proxy/tunnel on 443 (e.g. Cloudflare): the public hostname works anywhere
+        return {"phone_urls": [f"https://{request.url.hostname}/{q}"], "secure": secure,
+                "this_device": f"/live.html?s={lv.id}&fps={fps:g}"}
+    port = request.url.port if secure else int(os.environ.get("HAZARDMAP_HTTPS_PORT", "8443"))
     return {"phone_urls": [f"https://{ip}:{port}/{q}" for ip in _lan_ips()], "secure": secure,
             "this_device": f"/live.html?s={lv.id}&fps={fps:g}"}
 

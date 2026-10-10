@@ -55,7 +55,7 @@ def run(video: str, gps: str, out_dir: str | Path, cfg: PipelineConfig | None = 
     report("geolocating", 1.0)
     obs = geolocate(det, traj, t0, cfg)
     hazards = cluster(obs, cfg)
-    summary = export_run(out, hazards, obs, det.snapshots, traj.geojson(), cfg, {
+    summary = export_run(out, hazards, obs, det.snapshots, traj.geojson(t0, t0 + info["duration"]), cfg, {
         "mode": "batch",
         "video": Path(video).name, "gps": Path(gps).name,
         "video_start": iso(t0), "sync_method": sync,

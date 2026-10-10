@@ -187,7 +187,7 @@ def _case_dict(row: sqlite3.Row) -> dict | None:
     p = feat["properties"]
     s = _index["summaries"].get(row["run_id"], {})
     return {
-        "id": row["id"], "number": f"TT-{row['num']:04d}", "run_id": row["run_id"], "hazard_id": row["hazard_id"],
+        "id": row["id"], "number": f"TT-{row['num']:04d}", "seq": row["num"], "run_id": row["run_id"], "hazard_id": row["hazard_id"],
         "status": row["status"], "priority": row["priority"], "department": row["department"],
         "assignee": row["assignee"], "created_at": row["created_at"], "updated_at": row["updated_at"],
         "resolved_at": row["resolved_at"],
@@ -211,6 +211,18 @@ def _authority_block(row: sqlite3.Row, p: dict) -> dict:
     return {"authority": a["field"] if a else None, "escalation": a["escalation"] if a else None,
             "authority_code": a["field"]["office_code"] if a else None,
             "authority_auto": not row["authority_manual"]}
+
+
+def forget(run_id: str) -> int:
+    """A deleted drive: remove its cases and their activity log. Returns the number of cases removed."""
+    conn = _db()
+    with conn:
+        conn.execute("DELETE FROM activity WHERE case_id IN (SELECT id FROM cases WHERE run_id = ?)", (run_id,))
+        n = conn.execute("DELETE FROM cases WHERE run_id = ?", (run_id,)).rowcount
+    for k in ("mtimes", "features", "summaries", "weather"):
+        _index[k].pop(run_id, None)
+    _weather_tried.pop(run_id, None)
+    return n
 
 
 def all_cases() -> list[dict]:

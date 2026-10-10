@@ -101,6 +101,33 @@ Re-running the command resets the password and signs that account out everywhere
 
 Data lives in `data/platform.db` (git-ignored). For tests or a second instance, `TERRATRACE_PLATFORM_DB`, `TERRATRACE_CASES_DB` and `TERRATRACE_RUNS_DIR` override the locations.
 
+## Low-spec devices
+
+**Phones (contributor app).** Tested with Lighthouse and Chrome emulating a budget Android phone (CPU slowed 6×, 360×640 screen, slow 4G):
+
+| Page | Score | Ready in | Data |
+|---|---|---|---|
+| Login | 99 | 1.8 s | 133 KB |
+| Home / Rewards | 93 | 3.3–3.4 s | ~270 KB |
+| Map with a route | 81 | 4.8 s | 866 KB (mostly map tiles) |
+
+- **Responsiveness:** the main thread stays responsive (95% of timers fire within 16 ms), and JS memory stays under 10 MB.
+- **Live streaming** (real dashcam frames as the camera) adapts to the uplink. It sends 1280 p frames and steps down to 960 p and then 720 p while the upload can't keep up: about 30 fps on Wi-Fi, about 10 fps on 4G, and about 8 fps on slow 4G.
+- **Recorder:** keeps the video in memory until upload. Phones reporting ≤ 2 GB RAM record at 1.5 Mbps for up to 15 min; others at 2–2.5 Mbps for up to 30 min.
+- **Compression:** text responses (pages, scripts, API JSON) are gzip-compressed, which makes them 60–94% smaller.
+- **Photos:** map photos are served as cached thumbnails (`?w=160` / `?w=480`).
+
+**Server without a GPU.** The compute device is picked automatically (CUDA → Apple MPS → CPU; override with `TERRATRACE_DEVICE`), with a speed profile (`TERRATRACE_PROFILE=full|balanced|lite`). Measured on an M5 (budget laptop CPUs are roughly 3–4× slower):
+
+| Device + profile | Analysis speed | Hazards found |
+|---|---|---|
+| Apple GPU, full (default with a GPU) | ~15 fps | all; accuracy check 16/16 |
+| CPU, full | ~4.5 fps | all |
+| CPU, balanced (default without a GPU) | ~9 fps | all; accuracy check 16/16 |
+| CPU, lite | ~30 fps | road-surface damage only |
+
+Uploads are analysed at 5 fps of footage. So a slow server just takes longer per drive, and live sessions drop frames to stay current.
+
 ## Route checker (contributor app → Map)
 
 A Google-Maps-style screen for contributors: enter a start (or use **Your location**) and a destination, or long-press the map to drop a pin. The app then shows up to 3 driving routes and every **open** reported hazard on each one.

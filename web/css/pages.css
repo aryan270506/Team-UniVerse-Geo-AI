@@ -247,3 +247,7 @@
   .tour-card .tc-live b { font-size: var(--fs-lg); }
   .tour-controls { top: calc(60vh - 62px); bottom: auto; }
 }
+
+/* ---------- drives: select for delete ---------- */
+.table th.pick, .table td.pick { width: 36px; padding-right: 0; }
+.pick input { width: 18px; height: 18px; accent-color: #111; cursor: pointer; vertical-align: middle; }

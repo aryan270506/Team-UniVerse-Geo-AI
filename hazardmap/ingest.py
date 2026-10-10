@@ -119,14 +119,21 @@ class Trajectory:
         gap = min(abs(t - self.t[max(i - 1, 0)]), abs(self.t[min(i, len(self.t) - 1)] - t))
         return Pose(lat, lon, heading, speed, float(gap), True)
 
-    def geojson(self) -> dict:
+    def geojson(self, start: float | None = None, end: float | None = None) -> dict:
+        """The track as a LineString; with start/end (epoch s), only the part the video covers
+        (a GPS log usually runs longer than the clip: the rest would inflate the route length)."""
+        a = self.t0 if start is None else max(start, self.t0)
+        b = self.t1 if end is None else min(end, self.t1)
+        inside = (self.t > a) & (self.t < b)
+        lat, lon = self.df.lat.to_numpy(), self.df.lon.to_numpy()
+        pts = [(float(np.interp(a, self.t, lat)), float(np.interp(a, self.t, lon)))] if b > a else []
+        pts += list(zip(lat[inside], lon[inside]))
+        if b > a:
+            pts.append((float(np.interp(b, self.t, lat)), float(np.interp(b, self.t, lon))))
         return {
             "type": "Feature",
-            "properties": {"kind": "trajectory", "start": iso(self.t0), "end": iso(self.t1),
-                           "points": len(self.t)},
-            "geometry": {"type": "LineString",
-                         "coordinates": [[round(lo, 7), round(la, 7)]
-                                         for la, lo in zip(self.df.lat, self.df.lon)]},
+            "properties": {"kind": "trajectory", "start": iso(a), "end": iso(max(a, b)), "points": len(pts)},
+            "geometry": {"type": "LineString", "coordinates": [[round(lo, 7), round(la, 7)] for la, lo in pts]},
         }
 
 
